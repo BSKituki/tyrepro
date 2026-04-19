@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111111">
+<title>TYRE PRO</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;background:#0d0d0d;color:#f0ede6;font-family:'Noto Sans JP','Helvetica Neue',sans-serif;overscroll-behavior:none;}
+input,select,button{font-family:inherit;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:#111;}
+::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+#app{min-height:100vh;}
+.topbar{background:#111;border-bottom:1px solid #1e1e1e;padding:0 14px;display:flex;align-items:center;gap:8px;height:52px;position:sticky;top:0;z-index:100;}
+.nav{background:#111;border-bottom:1px solid #1a1a1a;display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.nav::-webkit-scrollbar{display:none;}
+.nav button{background:none;border:none;color:#484848;font-size:12px;padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;font-family:inherit;}
+.nav button.active{color:#E84545;border-bottom-color:#E84545;font-weight:700;}
+.datestrip{padding:9px 14px;display:flex;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.datestrip::-webkit-scrollbar{display:none;}
+.content{padding:0 14px 80px;}
+.overlay-bg{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:200;padding:12px;}
+.overlay-box{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:12px;padding:22px;width:100%;max-width:540px;max-height:92vh;overflow-y:auto;}
+.stitle{font-weight:800;font-size:15px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #222;}
+.fl{font-size:12px;color:#666;display:block;margin-bottom:4px;}
+.tinput{width:100%;background:#111;border:1px solid #333;border-radius:6px;padding:8px 12px;color:#f0ede6;font-size:14px;outline:none;font-family:inherit;}
+.tsel{width:100%;background:#111;border:1px solid #333;border-radius:6px;padding:8px 12px;color:#f0ede6;font-size:14px;font-family:inherit;}
+.pbtn{padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600;border:none;font-family:inherit;}
+.card{background:#161616;border:1px solid #202020;border-radius:10px;padding:11px 14px;cursor:pointer;margin-bottom:7px;}
+.badge-plate{display:inline-block;background:#1a2a1a;border:1px solid #4caf5066;border-radius:4px;padding:1px 6px;font-size:11px;color:#4caf50;font-weight:700;letter-spacing:2px;}
+.badge-visit{display:inline-block;background:#1a3040;border:1px solid #5ab4d666;border-radius:4px;padding:1px 7px;font-size:11px;color:#5ab4d6;font-weight:700;}
+.av{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0;}
+.suggest-box{position:absolute;top:100%;left:0;right:0;background:#1e1e1e;border:1px solid #333;border-radius:6px;z-index:50;max-height:140px;overflow-y:auto;}
+.suggest-item{padding:7px 11px;cursor:pointer;font-size:13px;border-bottom:1px solid #252525;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid #E84545;border-top-color:transparent;animation:spin 1s linear infinite;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ── ヘルパー ──
+var COLORS=["#E84545","#2B7A77","#F5A623","#7B2FBE","#1E88E5","#43A047","#E91E63","#FF7043"];
+var TODAY=new Date();
+function pad2(n){return String(n).padStart(2,"0");}
+function toKey(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());}
+function addDays(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function sameDay(a,b){return toKey(a)===toKey(b);}
+function jpDay(d){return["日","月","火","水","木","金","土"][d.getDay()];}
+function t2m(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
+function m2t(m){return pad2(Math.floor(m/60))+":"+pad2(m%60);}
+function fmtDate(key){var d=new Date(key);return(d.getMonth()+1)+"月"+d.getDate()+"日("+jpDay(d)+")";}
+function mapsUrl(a){return"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(a);}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+
+var DAYS=[],SLOTS=[];
+for(var _i=0;_i<60;_i++)DAYS.push(addDays(TODAY,_i));
+for(var _m=9*60;_m<=18*60;_m+=30)SLOTS.push(m2t(_m));
+
+// ── ストレージ(localStorage) ──
+var SK={staff:"tp-staff",svc:"tp-svc",cust:"tp-cust",res:"tp-res",shift:"tp-shift"};
+function load(k,def){try{var v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+// ── 初期データ ──
+var DEF_STAFF=[
+  {id:1,name:"田中 健",color:COLORS[0],avatar:"田",active:true},
+  {id:2,name:"佐藤 誠",color:COLORS[1],avatar:"佐",active:true},
+  {id:3,name:"山本 亮",color:COLORS[2],avatar:"山",active:true},
+  {id:4,name:"鈴木 学",color:COLORS[3],avatar:"鈴",active:true}
+];
+var DEF_SVC=[
+  {id:1,name:"タイヤ交換（4本）",dur:60,active:true},
+  {id:2,name:"タイヤ交換（2本）",dur:45,active:true},
+  {id:3,name:"タイヤローテーション",dur:30,active:true},
+  {id:4,name:"バランス調整",dur:30,active:true},
+  {id:5,name:"パンク修理",dur:30,active:true}
+];
+var DEF_CUST=[
+  {id:1001,lastName:"鈴木",firstName:"一郎",cars:[{make:"トヨタ プリウス",plate4:"1234"}],phone:"090-1234-5678",memo:""},
+  {id:1002,lastName:"山田",firstName:"花子",cars:[{make:"ホンダ フィット",plate4:"5678"}],phone:"",memo:""},
+  {id:1003,lastName:"中村",firstName:"次郎",cars:[{make:"日産 リーフ",plate4:"9012"}],phone:"080-9999-0000",memo:""}
+];
+var DEF_RES=[
+  {id:101,custId:1001,carIdx:0,sid:1,date:toKey(TODAY),time:"09:00",dur:60,stfIds:[1],status:"confirmed",memo:"",visit:false,address:""},
+  {id:102,custId:1002,carIdx:0,sid:3,date:toKey(TODAY),time:"10:30",dur:30,stfIds:[2],status:"confirmed",memo:"",visit:false,address:""},
+  {id:103,custId:1003,carIdx:0,sid:4,date:toKey(TODAY),time:"11:00",dur:30,stfIds:[3,4],status:"pending",memo:"2名対応",visit:false,address:""},
+  {id:104,custId:1001,carIdx:0,sid:2,date:toKey(addDays(TODAY,1)),time:"14:00",dur:45,stfIds:[1,2],status:"confirmed",memo:"",visit:true,address:"東京都新宿区西新宿1-1-1"}
+];
+function makeDefShifts(){
+  var s={};
+  DAYS.forEach(function(d){
+    var key=toKey(d);s[key]={};
+    DEF_STAFF.forEach(function(st){
+      var we=d.getDay()===0||d.getDay()===6;
+      s[key][st.id]=(we&&st.id%2===0)?null:{start:"09:00",end:"18:00"};
+    });
+  });
+  return s;
+}
+
+// ── アプリ状態 ──
+var S={
+  view:"timeline",
+  selDate:toKey(TODAY),
+  role:"manager",
+  staff:load(SK.staff,DEF_STAFF),
+  svcs:load(SK.svc,DEF_SVC),
+  res:load(SK.res,DEF_RES),
+  customers:load(SK.cust,DEF_CUST),
+  shifts:load(SK.shift,makeDefShifts()),
+  moff:0,
+  modal:null,  // null | "res_new" | "res_edit" | "cust_new" | "cust_edit" | "cust_detail" | "shift" | "staff_mgr" | "svc_mgr"
+  modalData:null,
+  rf:{custId:null,lastName:"",firstName:"",carIdx:0,newCarMake:"",newCarPlate4:"",sid:1,date:toKey(TODAY),time:"09:00",dur:60,stfIds:[1],status:"confirmed",memo:"",visit:false,address:""},
+  cf:{lastName:"",firstName:"",carMake:"",carPlate4:"",phone:"",memo:""},
+  sfForm:{name:"",color:COLORS[0]},
+  svForm:{name:"",dur:30},
+  custSearch:"",
+  shiftCell:null
+};
+
+function getStaff(id){return S.staff.find(function(s){return s.id===id;});}
+function getSvc(id){return S.svcs.find(function(s){return s.id===id;});}
+function getCust(id){return S.customers.find(function(c){return c.id===id;});}
+function activeStaff(){return S.staff.filter(function(s){return s.active;});}
+function activeSvcs(){return S.svcs.filter(function(s){return s.active;});}
+function todayRes(){return S.res.filter(function(r){return r.date===S.selDate;});}
+function custHistory(cid){return S.res.filter(function(r){return r.custId===cid;}).slice().sort(function(a,b){return b.date.localeCompare(a.date);});}
+function monthDays(){
+  var b=new Date(TODAY.getFullYear(),TODAY.getMonth()+S.moff,1);
+  var y=b.getFullYear(),mo=b.getMonth(),len=new Date(y,mo+1,0).getDate(),arr=[];
+  for(var i=0;i<len;i++)arr.push(new Date(y,mo,i+1));
+  return arr;
+}
+
+// ── 状態変更＋再描画 ──
+function setState(fn){fn(S);render();}
+function saveAll(){save(SK.staff,S.staff);save(SK.svc,S.svcs);save(SK.res,S.res);save(SK.cust,S.customers);save(SK.shift,S.shifts);}
+
+// ── DOM生成ヘルパー ──
+function el(tag,props,children){
+  var e=document.createElement(tag);
+  if(props)Object.keys(props).forEach(function(k){
+    if(k==="style"&&typeof props[k]==="object"){Object.assign(e.style,props[k]);}
+    else if(k.startsWith("on")){e.addEventListener(k.slice(2).toLowerCase(),props[k]);}
+    else if(k==="className"){e.className=props[k];}
+    else{e.setAttribute(k,props[k]);}
+  });
+  if(children){
+    (Array.isArray(children)?children:[children]).forEach(function(c){
+      if(c==null||c===false)return;
+      e.appendChild(typeof c==="string"||typeof c==="number"?document.createTextNode(c):c);
+    });
+  }
+  return e;
+}
+function txt(t){return document.createTextNode(t||"");}
+function div(style,children){return el("div",{style:style},children);}
+function span(style,children){return el("span",{style:style},children);}
+function btn(label,style,onClick){var b=el("button",{style:style,onClick:onClick});b.textContent=label;return b;}
+
+function avEl(s,sz){
+  sz=sz||28;
+  var d=el("div",{className:"av"});
+  d.style.width=sz+"px";d.style.height=sz+"px";d.style.background=s.color;d.style.fontSize=(sz*.4)+"px";
+  d.textContent=s.avatar;
+  return d;
+}
+function plateBadge(p){if(!p)return null;var s=el("span",{className:"badge-plate"});s.textContent=p;return s;}
+function visitBadge(){var s=el("span",{className:"badge-visit"});s.textContent="🚗 出張";return s;}
+
+function pBtn(label,vari,onClick,extraStyle){
+  var styles={
+    primary:{background:"#E84545",color:"#fff"},
+    ghost:{background:"transparent",color:"#888",border:"1px solid #333"},
+    danger:{background:"transparent",color:"#E84545",border:"1px solid #E84545"}
+  };
+  var b=el("button",{className:"pbtn",onClick:onClick,style:Object.assign({},styles[vari]||styles.ghost,extraStyle||{})});
+  b.textContent=label;
+  return b;
+}
+
+function tInput(value,onInput,placeholder,extraStyle){
+  var i=el("input",{className:"tinput",placeholder:placeholder||""});
+  i.value=value;
+  i.addEventListener("input",function(e){onInput(e.target.value);});
+  if(extraStyle)Object.assign(i.style,extraStyle);
+  return i;
+}
+function tSel(value,onChange,options){
+  var s=el("select",{className:"tsel"});
+  options.forEach(function(o){
+    var op=document.createElement("option");
+    op.value=o.value;op.textContent=o.label;
+    if(String(o.value)===String(value))op.selected=true;
+    s.appendChild(op);
+  });
+  s.addEventListener("change",function(e){onChange(e.target.value);});
+  return s;
+}
+
+function labelWrap(labelText,content){
+  var w=div({});
+  var l=el("label",{className:"fl"});l.textContent=labelText;
+  w.appendChild(l);w.appendChild(content);
+  return w;
+}
+
+// ── モーダル ──
+function openOverlay(contentFn){
+  var bg=div({position:"fixed",inset:0,background:"rgba(0,0,0,.88)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:"12px"});
+  var box=div({background:"#1c1c1c",border:"1px solid #2e2e2e",borderRadius:"12px",padding:"22px",width:"100%",maxWidth:"540px",maxHeight:"92vh",overflowY:"auto"});
+  bg.addEventListener("click",function(){bg.remove();});
+  box.addEventListener("click",function(e){e.stopPropagation();});
+  contentFn(box,function(){bg.remove();});
+  bg.appendChild(box);
+  document.getElementById("app").appendChild(bg);
+}
+function stitle(box,t){var d=div({fontWeight:800,fontSize:"15px",marginBottom:"14px",paddingBottom:"10px",borderBottom:"1px solid #222"});d.textContent=t;box.appendChild(d);}
+
+// ── 予約モーダル ──
+function openResModal(initRf,isNew){
+  var rf=Object.assign({},initRf);
+  openOverlay(function(box,close){
+    function rebuild(){box.innerHTML="";buildResModal(box,close,rf,isNew,function(newRf){rf=newRf;rebuild();});}
+    rebuild();
+  });
+}
+function buildResModal(box,close,rf,isNew,onRfChange){
+  stitle(box,isNew?"新規予約":"予約を編集");
+  var form=div({display:"flex",flexDirection:"column",gap:"11px"});
+
+  // 出張トグル
+  var visitBtn=el("button",{className:"pbtn",onClick:function(){onRfChange(Object.assign({},rf,{visit:!rf.visit}));}});
+  Object.assign(visitBtn.style,rf.visit?{background:"#1a3040",color:"#5ab4d6",border:"1px solid #5ab4d666"}:{background:"#1a1a1a",color:"#555",border:"1px solid #2a2a2a"});
+  visitBtn.textContent=rf.visit?"🚗 出張対応":"🏪 店舗対応";
+  form.appendChild(visitBtn);
+
+  // 住所
+  if(rf.visit){
+    var addrW=div({});
+    var addrL=el("label",{className:"fl"});addrL.textContent="訪問先住所";addrW.appendChild(addrL);
+    var addrI=tInput(rf.address,function(v){rf.address=v;if(mapLink){mapLink.href=mapsUrl(v);}},  "例：東京都新宿区西新宿1-1-1");
+    addrW.appendChild(addrI);
+    var mapLink=null;
+    if(rf.address){
+      mapLink=el("a",{href:mapsUrl(rf.address),target:"_blank",rel:"noopener noreferrer"});
+      Object.assign(mapLink.style,{display:"inline-block",marginTop:"5px",fontSize:"11px",color:"#5ab4d6",textDecoration:"none",background:"#1a3040",border:"1px solid #5ab4d644",borderRadius:"8px",padding:"3px 10px"});
+      mapLink.textContent="🗺 地図で確認";
+      addrW.appendChild(mapLink);
+    }
+    form.appendChild(addrW);
+  }
+
+  // 顧客検索
+  var custW=div({position:"relative"});
+  var grid2=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px"});
+  var lnW=div({position:"relative"});
+  var lnI=tInput(rf.lastName,function(v){
+    rf.lastName=v;rf.custId=null;rf.firstName="";rf.carIdx=0;
+    sugBox.innerHTML="";
+    var suggs=S.customers.filter(function(c){return v&&c.lastName.startsWith(v);});
+    if(suggs.length>0){
+      suggs.forEach(function(c){
+        var it=div({padding:"7px 11px",cursor:"pointer",fontSize:"13px",borderBottom:"1px solid #252525"});
+        it.textContent=c.lastName+" "+c.firstName+(c.cars[0]&&c.cars[0].plate4?" ["+c.cars[0].plate4+"]":"");
+        it.addEventListener("click",function(){
+          rf.custId=c.id;rf.lastName=c.lastName;rf.firstName=c.firstName;rf.carIdx=0;
+          lnI.value=c.lastName;fnI.value=c.firstName;
+          sugBox.innerHTML="";statusDiv.textContent="✓ 既存顧客";statusDiv.style.color="#4caf50";
+        });
+        sugBox.appendChild(it);
+      });
+    }
+  },"名字");
+  var sugBox=div({position:"absolute",top:"100%",left:0,right:0,background:"#1e1e1e",border:"1px solid #333",borderRadius:"6px",zIndex:50,maxHeight:"140px",overflowY:"auto"});
+  lnW.appendChild(lnI);lnW.appendChild(sugBox);
+  var fnI=tInput(rf.firstName,function(v){rf.firstName=v;},"名前");
+  grid2.appendChild(lnW);grid2.appendChild(fnI);
+  var custLabel=el("label",{className:"fl"});custLabel.textContent="お客様（名字で検索）";
+  custW.appendChild(custLabel);custW.appendChild(grid2);
+  var statusDiv=div({fontSize:"11px",marginTop:"3px"});
+  if(rf.custId){statusDiv.textContent="✓ 既存顧客";statusDiv.style.color="#4caf50";}
+  else if(rf.lastName){statusDiv.textContent="新規顧客として登録";statusDiv.style.color="#ffa726";}
+  custW.appendChild(statusDiv);
+  form.appendChild(custW);
+
+  // 車両
+  var c=rf.custId?getCust(rf.custId):null;
+  if(c&&c.cars.length>0){
+    form.appendChild(labelWrap("車両",tSel(rf.carIdx,function(v){rf.carIdx=Number(v);},c.cars.map(function(car,i){return{value:i,label:car.make+(car.plate4?" ["+car.plate4+"]":"")}; }))));
+  } else if(!rf.custId){
+    var carg=div({display:"grid",gridTemplateColumns:"1fr 88px",gap:"7px"});
+    carg.appendChild(labelWrap("車種",tInput(rf.newCarMake,function(v){rf.newCarMake=v;},"例：トヨタ プリウス")));
+    var p4i=tInput(rf.newCarPlate4,function(v){rf.newCarPlate4=v.replace(/\D/g,"").slice(0,4);},"1234");
+    Object.assign(p4i.style,{textAlign:"center",letterSpacing:"3px",fontWeight:"700"});
+    p4i.maxLength=4;
+    carg.appendChild(labelWrap("車番号4桁",p4i));
+    form.appendChild(carg);
+  }
+
+  // 作業
+  form.appendChild(labelWrap("作業内容",tSel(rf.sid,function(v){var sv=getSvc(Number(v));rf.sid=Number(v);if(sv)rf.dur=sv.dur;},activeSvcs().map(function(s){return{value:s.id,label:s.name+"（"+s.dur+"分）"}; }))));
+
+  // 日付・時間
+  var dtg=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"});
+  dtg.appendChild(labelWrap("日付",tSel(rf.date,function(v){rf.date=v;},DAYS.map(function(d){var k=toKey(d);return{value:k,label:(d.getMonth()+1)+"/"+d.getDate()+"("+jpDay(d)+")"}; }))));
+  dtg.appendChild(labelWrap("時間",tSel(rf.time,function(v){rf.time=v;},SLOTS.map(function(t){return{value:t,label:t}; }))));
+  form.appendChild(dtg);
+
+  // 担当スタッフ
+  var stfW=div({});
+  var stfL=el("label",{className:"fl"});stfL.textContent="担当スタッフ（複数可）";stfW.appendChild(stfL);
+  var stfGrid=div({display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"6px"});
+  activeStaff().forEach(function(s){
+    var sel=rf.stfIds.indexOf(s.id)!==-1;
+    var sb=el("button",{className:"pbtn",onClick:function(){
+      var ids=rf.stfIds.slice();var idx=ids.indexOf(s.id);
+      if(idx===-1)ids.push(s.id);else if(ids.length>1)ids.splice(idx,1);
+      rf.stfIds=ids;
+      Object.assign(sb.style,sel2style(!sel));
+      chk.textContent=rf.stfIds.indexOf(s.id)!==-1?"✓":"";
+    }});
+    function sel2style(isSel){return isSel?{border:"1px solid "+s.color,background:s.color+"22",color:s.color}:{border:"1px solid #2a2a2a",background:"transparent",color:"#666"};}
+    Object.assign(sb.style,sel2style(sel));
+    sb.style.display="flex";sb.style.alignItems="center";sb.style.gap="6px";sb.style.fontSize="12px";
+    sb.appendChild(avEl(s,18));
+    sb.appendChild(document.createTextNode(s.name));
+    var chk=span({marginLeft:"auto",fontSize:"11px"});chk.textContent=sel?"✓":"";
+    sb.appendChild(chk);
+    stfGrid.appendChild(sb);
+  });
+  stfW.appendChild(stfGrid);
+  form.appendChild(stfW);
+
+  // ステータス
+  var stW=div({});var stL=el("label",{className:"fl"});stL.textContent="ステータス";stW.appendChild(stL);
+  var stRow=div({display:"flex",gap:"7px"});
+  [["confirmed","確定"],["pending","仮予約"]].forEach(function(p){
+    var b=el("button",{className:"pbtn",onClick:function(){
+      rf.status=p[0];
+      stRow.querySelectorAll("button").forEach(function(x){Object.assign(x.style,{border:"1px solid #2a2a2a",background:"transparent",color:"#555"});});
+      Object.assign(b.style,{border:"1px solid #E84545",background:"#E8454522",color:"#E84545"});
+    }});
+    b.textContent=p[1];b.style.flex="1";
+    if(rf.status===p[0])Object.assign(b.style,{border:"1px solid #E84545",background:"#E8454522",color:"#E84545"});
+    else Object.assign(b.style,{border:"1px solid #2a2a2a",background:"transparent",color:"#555"});
+    stRow.appendChild(b);
+  });
+  stW.appendChild(stRow);form.appendChild(stW);
+
+  // メモ
+  form.appendChild(labelWrap("メモ",tInput(rf.memo,function(v){rf.memo=v;},"備考など")));
+  box.appendChild(form);
+
+  // ボタン
+  var btnRow=div({display:"flex",gap:"7px",marginTop:"16px"});
+  if(!isNew){
+    btnRow.appendChild(pBtn("削除","danger",function(){
+      S.res=S.res.filter(function(r){return r.id!==rf._id;});save(SK.res,S.res);close();render();
+    }));
+  }
+  btnRow.appendChild(pBtn("キャンセル","ghost",close,{flex:1}));
+  btnRow.appendChild(pBtn("保存","primary",function(){
+    if(!rf.lastName.trim()||!rf.firstName.trim())return;
+    var svc=getSvc(Number(rf.sid));var dur=svc?svc.dur:rf.dur;
+    var custId=rf.custId;
+    if(!custId){
+      var cars=rf.newCarMake.trim()?[{make:rf.newCarMake.trim(),plate4:rf.newCarPlate4}]:[];
+      var nc={id:Date.now(),lastName:rf.lastName.trim(),firstName:rf.firstName.trim(),cars:cars,phone:"",memo:""};
+      S.customers.push(nc);custId=nc.id;save(SK.cust,S.customers);
+    }
+    var entry={custId:custId,carIdx:rf.carIdx,sid:Number(rf.sid),date:rf.date,time:rf.time,dur:dur,stfIds:rf.stfIds,status:rf.status,memo:rf.memo,visit:rf.visit,address:rf.address};
+    if(isNew){S.res.push(Object.assign({id:Date.now()},entry));}
+    else{S.res=S.res.map(function(r){return r.id===rf._id?Object.assign({id:rf._id},entry):r;});}
+    save(SK.res,S.res);close();render();
+  },{flex:2}));
+  box.appendChild(btnRow);
+}
+
+// ── 顧客詳細モーダル ──
+function openCustDetail(c){
+  openOverlay(function(box,close){
+    var hdr=div({display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"14px"});
+    var nameD=div({});var nd=div({fontWeight:800,fontSize:"19px"});nd.textContent=c.lastName+" "+c.firstName;nameD.appendChild(nd);
+    if(c.phone){var ph=div({fontSize:"13px",color:"#666",marginTop:"2px"});ph.textContent="📞 "+c.phone;nameD.appendChild(ph);}
+    hdr.appendChild(nameD);
+    if(S.role==="manager"){hdr.appendChild(pBtn("編集","ghost",function(){close();openCustEdit(c);},{fontSize:"11px",padding:"5px 9px"}));}
+    box.appendChild(hdr);
+
+    // 車両
+    var carD=div({background:"#111",borderRadius:"8px",padding:"11px",marginBottom:"11px"});
+    var carT=div({fontSize:"11px",color:"#555",marginBottom:"5px"});carT.textContent="登録車両";carD.appendChild(carT);
+    if(c.cars.length>0){c.cars.forEach(function(car,i){
+      var row=div({display:"flex",alignItems:"center",gap:"7px",padding:"4px 0",borderBottom:i<c.cars.length-1?"1px solid #1a1a1a":"none"});
+      var mk=span({fontSize:"13px",fontWeight:"600",color:"#ccc",flex:"1"});mk.textContent=car.make;row.appendChild(mk);
+      if(car.plate4)row.appendChild(plateBadge(car.plate4));
+      carD.appendChild(row);
+    });}else{var nm=div({fontSize:"12px",color:"#333"});nm.textContent="未登録";carD.appendChild(nm);}
+    box.appendChild(carD);
+
+    // 履歴
+    var hist=custHistory(c.id);
+    var ht=div({fontSize:"12px",color:"#555",marginBottom:"6px"});ht.textContent="来店履歴（"+hist.length+"件）";box.appendChild(ht);
+    var hl=div({display:"flex",flexDirection:"column",gap:"5px",maxHeight:"220px",overflowY:"auto"});
+    if(hist.length===0){var hn=div({padding:"20px",textAlign:"center",color:"#333",fontSize:"12px"});hn.textContent="履歴なし";hl.appendChild(hn);}
+    hist.forEach(function(r){
+      var rc=div({background:"#161616",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"9px 12px"});
+      var top=div({display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"});
+      var dt=span({fontSize:"13px",fontWeight:"700",color:r.date>=toKey(TODAY)?"#E84545":"#ccc"});
+      dt.textContent=fmtDate(r.date)+" "+r.time;top.appendChild(dt);
+      if(r.visit)top.appendChild(visitBadge());
+      var car2=c.cars[r.carIdx||0];if(car2&&car2.plate4)top.appendChild(plateBadge(car2.plate4));
+      rc.appendChild(top);
+      var sv=getSvc(r.sid);
+      var sub=div({fontSize:"12px",color:"#666",marginTop:"2px"});sub.textContent=(sv?sv.name:"—")+(car2?" / "+car2.make:"");rc.appendChild(sub);
+      if(r.visit&&r.address){var ad=div({fontSize:"11px",color:"#5ab4d6",marginTop:"2px"});ad.textContent="📍 "+r.address;rc.appendChild(ad);}
+      var stfR=div({display:"flex",gap:"4px",marginTop:"4px",flexWrap:"wrap"});
+      (r.stfIds||[]).forEach(function(sid){var s=getStaff(sid);if(!s)return;
+        var sb=div({display:"flex",alignItems:"center",gap:"3px",background:s.color+"18",borderRadius:"10px",padding:"1px 6px 1px 3px"});
+        sb.appendChild(avEl(s,14));var sn=span({fontSize:"10px",color:s.color});sn.textContent=s.name.split(" ")[0];sb.appendChild(sn);stfR.appendChild(sb);
+      });
+      rc.appendChild(stfR);
+      hl.appendChild(rc);
+    });
+    box.appendChild(hl);
+
+    var btnRow=div({marginTop:"13px",display:"flex",gap:"7px"});
+    if(S.role==="manager"){btnRow.appendChild(pBtn("削除","danger",function(){
+      S.customers=S.customers.filter(function(x){return x.id!==c.id;});save(SK.cust,S.customers);close();render();
+    },{fontSize:"11px",padding:"6px 9px"}));}
+    btnRow.appendChild(pBtn("閉じる","ghost",close,{flex:"1",fontSize:"12px"}));
+    btnRow.appendChild(pBtn("この顧客で予約","primary",function(){
+      close();
+      var rf={custId:c.id,lastName:c.lastName,firstName:c.firstName,carIdx:0,newCarMake:"",newCarPlate4:"",
+        sid:activeSvcs()[0]?activeSvcs()[0].id:1,date:toKey(TODAY),time:"09:00",
+        dur:activeSvcs()[0]?activeSvcs()[0].dur:60,
+        stfIds:activeStaff()[0]?[activeStaff()[0].id]:[],status:"confirmed",memo:"",visit:false,address:""};
+      openResModal(rf,true);
+    },{flex:"2",fontSize:"12px"}));
+    box.appendChild(btnRow);
+  });
+}
+
+// ── 顧客登録・編集 ──
+function openCustEdit(cOrNull){
+  var isNew=!cOrNull;
+  var cf=isNew?{lastName:"",firstName:"",carMake:"",carPlate4:"",phone:"",memo:""}:
+    {lastName:cOrNull.lastName,firstName:cOrNull.firstName,carMake:cOrNull.cars[0]?cOrNull.cars[0].make:"",carPlate4:cOrNull.cars[0]?cOrNull.cars[0].plate4:"",phone:cOrNull.phone||"",memo:cOrNull.memo||""};
+  openOverlay(function(box,close){
+    stitle(box,isNew?"顧客登録":"顧客情報を編集");
+    var form=div({display:"flex",flexDirection:"column",gap:"11px"});
+    var g=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"});
+    var lnI=tInput(cf.lastName,function(v){cf.lastName=v;},"田中");
+    var fnI=tInput(cf.firstName,function(v){cf.firstName=v;},"健");
+    g.appendChild(labelWrap("名字",lnI));g.appendChild(labelWrap("名前",fnI));form.appendChild(g);
+    form.appendChild(labelWrap("車種",tInput(cf.carMake,function(v){cf.carMake=v;},"例：トヨタ プリウス")));
+    var p4row=div({display:"flex",alignItems:"center",gap:"10px"});
+    var p4i=tInput(cf.carPlate4,function(v){cf.carPlate4=v.replace(/\D/g,"").slice(0,4);},"1234");
+    Object.assign(p4i.style,{width:"100px",textAlign:"center",letterSpacing:"4px",fontWeight:"700",fontSize:"16px",flexShrink:"0"});
+    p4i.maxLength=4;
+    p4row.appendChild(p4i);var p4hint=span({fontSize:"11px",color:"#444"});p4hint.textContent="数字4桁のみ";p4row.appendChild(p4hint);
+    form.appendChild(labelWrap("車番号（末尾4桁）",p4row));
+    form.appendChild(labelWrap("電話番号（任意）",tInput(cf.phone,function(v){cf.phone=v;},"090-0000-0000")));
+    form.appendChild(labelWrap("メモ（任意）",tInput(cf.memo,function(v){cf.memo=v;},"注意事項など")));
+    box.appendChild(form);
+    var btnRow=div({display:"flex",gap:"7px",marginTop:"16px"});
+    if(!isNew){btnRow.appendChild(pBtn("削除","danger",function(){
+      S.customers=S.customers.filter(function(x){return x.id!==cOrNull.id;});save(SK.cust,S.customers);close();render();
+    }));}
+    btnRow.appendChild(pBtn("キャンセル","ghost",close,{flex:1}));
+    btnRow.appendChild(pBtn("保存","primary",function(){
+      if(!cf.lastName.trim()||!cf.firstName.trim())return;
+      if(isNew){
+        var cars=cf.carMake.trim()?[{make:cf.carMake.trim(),plate4:cf.carPlate4}]:[];
+        S.customers.push({id:Date.now(),lastName:cf.lastName.trim(),firstName:cf.firstName.trim(),cars:cars,phone:cf.phone.trim(),memo:cf.memo.trim()});
+      }else{
+        S.customers=S.customers.map(function(cx){
+          if(cx.id!==cOrNull.id)return cx;
+          var cars=cx.cars.slice();
+          if(cf.carMake.trim()){var ei=cars.findIndex(function(x){return x.make===cf.carMake.trim();});
+            if(ei===-1)cars.unshift({make:cf.carMake.trim(),plate4:cf.carPlate4});else cars[ei]={make:cf.carMake.trim(),plate4:cf.carPlate4};}
+          return Object.assign({},cx,{lastName:cf.lastName.trim(),firstName:cf.firstName.trim(),cars:cars,phone:cf.phone.trim(),memo:cf.memo.trim()});
+        });
+      }
+      save(SK.cust,S.customers);close();render();
+    },{flex:2}));
+    box.appendChild(btnRow);
+  });
+}
+
+// ── シフト編集 ──
+function openShiftCell(date,sid){
+  var s=getStaff(sid);
+  openOverlay(function(box,close){
+    stitle(box,"シフト編集");
+    if(s){
+      var hdr=div({display:"flex",alignItems:"center",gap:"8px",marginBottom:"13px"});
+      hdr.appendChild(avEl(s,28));var nd=div({});
+      var nm=div({fontWeight:700});nm.textContent=s.name;nd.appendChild(nm);
+      var d=new Date(date);var dd=div({fontSize:"12px",color:"#555"});dd.textContent=(d.getMonth()+1)+"月"+d.getDate()+"日（"+jpDay(d)+"）";nd.appendChild(dd);
+      hdr.appendChild(nd);box.appendChild(hdr);
+    }
+    var shift=(S.shifts[date]||{})[sid];
+    var row=div({display:"flex",gap:"7px",marginBottom:"11px"});
+    var outBtn=el("button",{className:"pbtn",onClick:function(){
+      if(!S.shifts[date])S.shifts[date]={};
+      S.shifts[date][sid]={start:"09:00",end:"18:00"};save(SK.shift,S.shifts);close();render();
+    }});
+    outBtn.textContent="出勤";outBtn.style.flex="1";
+    Object.assign(outBtn.style,shift?{border:"1px solid #4caf50",background:"#4caf5022",color:"#4caf50",fontWeight:700}:{border:"1px solid #252525",background:"transparent",color:"#555"});
+    var offBtn=el("button",{className:"pbtn",onClick:function(){
+      if(!S.shifts[date])S.shifts[date]={};
+      S.shifts[date][sid]=null;save(SK.shift,S.shifts);close();render();
+    }});
+    offBtn.textContent="休日";offBtn.style.flex="1";
+    Object.assign(offBtn.style,!shift?{border:"1px solid #E84545",background:"#E8454522",color:"#E84545",fontWeight:700}:{border:"1px solid #252525",background:"transparent",color:"#555"});
+    row.appendChild(outBtn);row.appendChild(offBtn);box.appendChild(row);
+    if(shift){
+      var tg=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"11px"});
+      tg.appendChild(labelWrap("開始",tSel(shift.start,function(v){S.shifts[date][sid].start=v;save(SK.shift,S.shifts);},SLOTS.map(function(t){return{value:t,label:t}; }))));
+      tg.appendChild(labelWrap("終了",tSel(shift.end,function(v){S.shifts[date][sid].end=v;save(SK.shift,S.shifts);},SLOTS.map(function(t){return{value:t,label:t}; }))));
+      box.appendChild(tg);
+    }
+    box.appendChild(pBtn("確定","primary",close,{width:"100%"}));
+  });
+}
+
+// ── スタッフ管理 ──
+function openStaffMgr(){
+  openOverlay(function(box,close){
+    function rebuild(){box.innerHTML="";buildStaffMgr(box,close,rebuild);}rebuild();
+  });
+}
+function buildStaffMgr(box,close,rebuild){
+  stitle(box,"スタッフ管理");
+  var addBox=div({background:"#111",borderRadius:"8px",padding:"12px",marginBottom:"13px"});
+  var addT=div({fontSize:"11px",color:"#555",marginBottom:"7px"});addT.textContent="新規追加";addBox.appendChild(addT);
+  var row=div({display:"flex",gap:"7px",alignItems:"flex-end",flexWrap:"wrap"});
+  var nameI=tInput(S.sfForm.name,function(v){S.sfForm.name=v;},"山田 太郎");nameI.style.flex="1";nameI.style.minWidth="100px";
+  row.appendChild(labelWrap("名前",nameI));
+  var colorD=div({});var cL=el("label",{className:"fl"});cL.textContent="カラー";colorD.appendChild(cL);
+  var cRow=div({display:"flex",gap:"3px",flexWrap:"wrap"});
+  COLORS.forEach(function(c){
+    var cb=el("button",{onClick:function(){S.sfForm.color=c;cRow.querySelectorAll("button").forEach(function(x){x.style.border="2px solid transparent";});cb.style.border="2px solid #fff";}});
+    Object.assign(cb.style,{width:"20px",height:"20px",borderRadius:"50%",background:c,border:S.sfForm.color===c?"2px solid #fff":"2px solid transparent",cursor:"pointer"});
+    cRow.appendChild(cb);
+  });
+  colorD.appendChild(cRow);row.appendChild(colorD);
+  row.appendChild(pBtn("追加","primary",function(){
+    if(!S.sfForm.name.trim())return;
+    var n=S.sfForm.name.trim();
+    S.staff.push({id:Date.now(),name:n,color:S.sfForm.color,avatar:n[0],active:true});
+    S.sfForm={name:"",color:COLORS[0]};save(SK.staff,S.staff);rebuild();
+  },{padding:"6px 10px",whiteSpace:"nowrap"}));
+  addBox.appendChild(row);box.appendChild(addBox);
+  var list=div({display:"flex",flexDirection:"column",gap:"6px"});
+  S.staff.forEach(function(s){
+    var row=div({display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:"#111",borderRadius:"8px",border:"1px solid #1e1e1e"});
+    row.appendChild(avEl(s,24));var nm=span({flex:"1",fontSize:"13px",fontWeight:"600",color:s.active?"#f0ede6":"#3a3a3a"});nm.textContent=s.name;row.appendChild(nm);
+    row.appendChild(pBtn(s.active?"有効":"無効",s.active?"ghost":"ghost",function(){s.active=!s.active;save(SK.staff,S.staff);rebuild();},{fontSize:"11px",padding:"2px 8px",borderRadius:"10px",border:"1px solid "+(s.active?"#4caf50":"#333"),color:s.active?"#4caf50":"#444"}));
+    row.appendChild(pBtn("削除","danger",function(){S.staff=S.staff.filter(function(x){return x.id!==s.id;});save(SK.staff,S.staff);rebuild();},{fontSize:"11px",padding:"2px 8px",borderRadius:"10px"}));
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+  box.appendChild(div({marginTop:"14px",textAlign:"right"},[pBtn("閉じる","primary",function(){close();render();})]));
+}
+
+// ── 作業管理 ──
+function openSvcMgr(){
+  openOverlay(function(box,close){
+    function rebuild(){box.innerHTML="";buildSvcMgr(box,close,rebuild);}rebuild();
+  });
+}
+function buildSvcMgr(box,close,rebuild){
+  stitle(box,"作業内容管理");
+  var addBox=div({background:"#111",borderRadius:"8px",padding:"12px",marginBottom:"13px"});
+  var addT=div({fontSize:"11px",color:"#555",marginBottom:"7px"});addT.textContent="新規追加";addBox.appendChild(addT);
+  var row=div({display:"flex",gap:"7px",alignItems:"flex-end",flexWrap:"wrap"});
+  var nmI=tInput(S.svForm.name,function(v){S.svForm.name=v;},"オイル交換");nmI.style.flex="1";nmI.style.minWidth="100px";
+  row.appendChild(labelWrap("作業名",nmI));
+  row.appendChild(labelWrap("所要時間",tSel(S.svForm.dur,function(v){S.svForm.dur=Number(v);},[15,30,45,60,90,120].map(function(d){return{value:d,label:d+"分"}; }))));
+  row.appendChild(pBtn("追加","primary",function(){
+    if(!S.svForm.name.trim())return;
+    var n=S.svForm.name.trim();
+    S.svcs.push({id:Date.now(),name:n,dur:Number(S.svForm.dur),active:true});
+    S.svForm={name:"",dur:30};save(SK.svc,S.svcs);rebuild();
+  },{padding:"6px 10px",whiteSpace:"nowrap"}));
+  addBox.appendChild(row);box.appendChild(addBox);
+  var list=div({display:"flex",flexDirection:"column",gap:"6px"});
+  S.svcs.forEach(function(s){
+    var row=div({display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",background:"#111",borderRadius:"8px",border:"1px solid #1e1e1e"});
+    var nd=div({flex:"1"});var nm=div({fontSize:"13px",fontWeight:"600",color:s.active?"#f0ede6":"#3a3a3a"});nm.textContent=s.name;nd.appendChild(nm);var dd=div({fontSize:"11px",color:"#444"});dd.textContent=s.dur+"分";nd.appendChild(dd);row.appendChild(nd);
+    row.appendChild(pBtn(s.active?"有効":"無効","ghost",function(){s.active=!s.active;save(SK.svc,S.svcs);rebuild();},{fontSize:"11px",padding:"2px 8px",borderRadius:"10px",border:"1px solid "+(s.active?"#4caf50":"#333"),color:s.active?"#4caf50":"#444"}));
+    row.appendChild(pBtn("削除","danger",function(){S.svcs=S.svcs.filter(function(x){return x.id!==s.id;});save(SK.svc,S.svcs);rebuild();},{fontSize:"11px",padding:"2px 8px",borderRadius:"10px"}));
+    list.appendChild(row);
+  });
+  box.appendChild(list);
+  box.appendChild(div({marginTop:"14px",textAlign:"right"},[pBtn("閉じる","primary",function(){close();render();})]));
+}
+
+// ── メイン描画 ──
+function render(){
+  var app=document.getElementById("app");
+  app.innerHTML="";
+
+  // TOP BAR
+  var tb=div({background:"#111",borderBottom:"1px solid #1e1e1e",padding:"0 14px",display:"flex",alignItems:"center",gap:"8px",height:"52px",position:"sticky",top:"0",zIndex:"100"});
+  var logo=div({display:"flex",alignItems:"center",gap:"6px"});
+  var ic=div({width:"22px",height:"22px",borderRadius:"50%",background:"#E84545",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px"});ic.textContent="⚙";logo.appendChild(ic);
+  var tt=span({fontWeight:800,fontSize:"13px",letterSpacing:"2px"});tt.textContent="TYRE PRO";logo.appendChild(tt);
+  tb.appendChild(logo);tb.appendChild(div({flex:"1"}));
+  if(S.role==="manager"){
+    var mg=div({display:"flex",gap:"5px"});
+    mg.appendChild(pBtn("スタッフ","ghost",openStaffMgr,{fontSize:"11px",padding:"4px 8px"}));
+    mg.appendChild(pBtn("作業","ghost",openSvcMgr,{fontSize:"11px",padding:"4px 8px"}));
+    tb.appendChild(mg);
+  }
+  var roleRow=div({display:"flex",background:"#1a1a1a",borderRadius:"6px",overflow:"hidden",border:"1px solid #252525"});
+  [["manager","管理者"],["staff","スタッフ"]].forEach(function(p){
+    var rb=el("button",{onClick:function(){S.role=p[0];render();}});
+    Object.assign(rb.style,{padding:"4px 9px",fontSize:"11px",border:"none",cursor:"pointer",fontFamily:"inherit",
+      background:S.role===p[0]?"#E84545":"transparent",color:S.role===p[0]?"#fff":"#555",fontWeight:S.role===p[0]?700:400});
+    rb.textContent=p[1];roleRow.appendChild(rb);
+  });
+  tb.appendChild(roleRow);
+  tb.appendChild(pBtn("＋予約","primary",function(){
+    var rf={custId:null,lastName:"",firstName:"",carIdx:0,newCarMake:"",newCarPlate4:"",
+      sid:activeSvcs()[0]?activeSvcs()[0].id:1,date:S.selDate,time:"09:00",
+      dur:activeSvcs()[0]?activeSvcs()[0].dur:60,
+      stfIds:activeStaff()[0]?[activeStaff()[0].id]:[],status:"confirmed",memo:"",visit:false,address:""};
+    openResModal(rf,true);
+  },{fontSize:"12px",padding:"5px 11px"}));
+  app.appendChild(tb);
+
+  // NAV
+  var nav=el("div",{className:"nav"});
+  [["timeline","タイムライン"],["list","予約一覧"],["shift","シフト管理"],["customers","顧客管理"],["visit","出張一覧"]].forEach(function(p){
+    var nb=el("button",{onClick:function(){S.view=p[0];render();}});
+    if(S.view===p[0])nb.className="active";
+    nb.textContent=p[1];nav.appendChild(nb);
+  });
+  app.appendChild(nav);
+
+  // DATE STRIP
+  if(S.view==="timeline"||S.view==="list"){
+    var ds=el("div",{className:"datestrip"});
+    DAYS.slice(0,14).forEach(function(d){
+      var key=toKey(d),isSel=key===S.selDate,isToday=sameDay(d,TODAY),wd=d.getDay();
+      var db=el("button",{onClick:function(){S.selDate=key;render();}});
+      Object.assign(db.style,{flexShrink:0,padding:"5px 7px",borderRadius:"8px",border:"1px solid "+(isSel?"#E84545":"#222"),background:isSel?"#E84545":"transparent",color:isSel?"#fff":wd===0?"#E84545":wd===6?"#5599ff":"#666",cursor:"pointer",textAlign:"center",minWidth:"40px",fontFamily:"inherit"});
+      var dm=div({fontSize:"9px",marginBottom:"1px"});dm.textContent=(d.getMonth()+1)+"/"+d.getDate();db.appendChild(dm);
+      var dw=div({fontSize:"11px",fontWeight:"700"});dw.textContent=jpDay(d);db.appendChild(dw);
+      if(isToday){var dot=div({width:"4px",height:"4px",borderRadius:"50%",background:isSel?"#fff":"#E84545",margin:"2px auto 0"});db.appendChild(dot);}
+      ds.appendChild(db);
+    });
+    app.appendChild(ds);
+  }
+
+  var content=el("div",{className:"content"});
+
+  // ════ TIMELINE ════
+  if(S.view==="timeline"){
+    var as=activeStaff();
+    var tl=div({overflowX:"auto"});
+    var grid=div({display:"grid",gridTemplateColumns:"48px repeat("+as.length+",minmax(120px,1fr))",minWidth:"300px"});
+    grid.appendChild(div({}));
+    as.forEach(function(s){
+      var hd=div({height:"42px",display:"flex",alignItems:"center",justifyContent:"center",gap:"5px",borderBottom:"1px solid #1a1a1a"});
+      hd.appendChild(avEl(s,22));var sn=span({fontSize:"11px",fontWeight:"700"});sn.textContent=s.name.split(" ")[0];hd.appendChild(sn);grid.appendChild(hd);
+    });
+    var timeCol=div({});
+    SLOTS.forEach(function(t){
+      var tr=div({height:"48px",display:"flex",alignItems:"flex-start",paddingTop:"3px",justifyContent:"flex-end",paddingRight:"5px"});
+      var ts=span({fontSize:"9px",color:"#303030"});ts.textContent=t;tr.appendChild(ts);timeCol.appendChild(tr);
+    });
+    grid.appendChild(timeCol);
+    as.forEach(function(s){
+      var sRes=todayRes().filter(function(r){return r.stfIds&&r.stfIds.indexOf(s.id)!==-1;});
+      var shift=(S.shifts[S.selDate]||{})[s.id];
+      var col=div({position:"relative",borderLeft:"1px solid #1a1a1a"});
+      SLOTS.forEach(function(t){col.appendChild(div({height:"48px",borderBottom:"1px solid #141414"}));});
+      if(shift){
+        var top=(t2m(shift.start)-9*60)/30*48,h=(t2m(shift.end)-9*60)/30*48-top;
+        var shd=div({position:"absolute",left:0,right:0,background:"rgba(255,255,255,0.018)",borderLeft:"3px solid "+s.color+"44"});
+        shd.style.top=top+"px";shd.style.height=h+"px";col.appendChild(shd);
+      }else{
+        var off=div({position:"absolute",inset:0,background:"repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(255,255,255,0.01) 6px,rgba(255,255,255,0.01) 12px)",pointerEvents:"none"});
+        var offT=div({textAlign:"center",paddingTop:"60px",fontSize:"10px",color:"#2a2a2a"});offT.textContent="休";off.appendChild(offT);col.appendChild(off);
+      }
+      sRes.forEach(function(r){
+        var rtop=(t2m(r.time)-9*60)/30*48,rh=(r.dur/30)*48-4;
+        var rb=div({position:"absolute",left:"4px",right:"4px",background:r.visit?"#1a3a4a":s.color,borderRadius:"6px",padding:"3px 6px",cursor:"pointer",overflow:"hidden"});
+        rb.style.top=(rtop+2)+"px";rb.style.height=rh+"px";
+        rb.style.opacity=r.status==="pending"?"0.72":"1";
+        rb.style.border=r.visit?"2px solid #5ab4d6":r.status==="pending"?"1px dashed rgba(255,255,255,.3)":"none";
+        var c=getCust(r.custId),car=c&&c.cars[r.carIdx||0],svc=getSvc(r.sid);
+        var rn=div({fontSize:"10px",fontWeight:"700",color:"#fff",lineHeight:"1.3"});
+        rn.textContent=(r.visit?"🚗 ":"")+(c?c.lastName+c.firstName:"—");rb.appendChild(rn);
+        var rs=div({fontSize:"9px",color:"rgba(255,255,255,.8)"});rs.textContent=r.time+"・"+(svc?svc.name:"—");rb.appendChild(rs);
+        if(car&&car.plate4){var rp=div({fontSize:"9px",color:"rgba(255,255,255,.65)"});rp.textContent="["+car.plate4+"]";rb.appendChild(rp);}
+        rb.addEventListener("click",function(){
+          var initRf=Object.assign({},r,{_id:r.id,lastName:c?c.lastName:"",firstName:c?c.firstName:""});
+          openResModal(initRf,false);
+        });
+        col.appendChild(rb);
+      });
+      grid.appendChild(col);
+    });
+    tl.appendChild(grid);content.appendChild(tl);
+  }
+
+  // ════ LIST ════
+  if(S.view==="list"){
+    var tr2=todayRes();
+    var tc=div({marginBottom:"8px",fontSize:"12px",color:"#444"});tc.textContent=tr2.length+"件";content.appendChild(tc);
+    if(tr2.length===0){var em=div({padding:"40px",textAlign:"center",color:"#2a2a2a",border:"1px solid #1a1a1a",borderRadius:"10px"});em.textContent="予約なし";content.appendChild(em);}
+    tr2.slice().sort(function(a,b){return a.time.localeCompare(b.time);}).forEach(function(r){
+      var c=getCust(r.custId),car=c&&c.cars[r.carIdx||0],svc=getSvc(r.sid);
+      var card=div({background:"#161616",borderRadius:"10px",padding:"11px 14px",cursor:"pointer",marginBottom:"7px",
+        borderLeft:r.visit?"3px solid #5ab4d6":"3px solid transparent",
+        border:r.visit?"1px solid #5ab4d644":"1px solid #202020"});
+      var top=div({display:"flex",alignItems:"flex-start",gap:"9px"});
+      var tm=div({fontSize:"17px",fontWeight:"800",color:r.visit?"#5ab4d6":"#E84545",minWidth:"50px"});tm.textContent=r.time;top.appendChild(tm);
+      var info=div({flex:"1"});
+      var nh=div({display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"});
+      var nm2=span({fontWeight:"700",fontSize:"14px"});nm2.textContent=c?c.lastName+" "+c.firstName:"—";nh.appendChild(nm2);
+      if(car&&car.plate4)nh.appendChild(plateBadge(car.plate4));
+      if(r.visit)nh.appendChild(visitBadge());
+      var stBadge=span({fontSize:"10px",padding:"2px 6px",borderRadius:"10px",fontWeight:"700",background:r.status==="confirmed"?"#4caf5022":"#ffa72622",color:r.status==="confirmed"?"#4caf50":"#ffa726"});stBadge.textContent=r.status==="confirmed"?"確定":"仮予約";nh.appendChild(stBadge);
+      info.appendChild(nh);
+      var sub2=div({fontSize:"12px",color:"#666",marginTop:"2px"});sub2.textContent=(car?car.make:"—")+" / "+(svc?svc.name:"—")+"（"+r.dur+"分）";info.appendChild(sub2);
+      if(r.visit&&r.address){var ad2=div({fontSize:"11px",color:"#5ab4d6",marginTop:"3px"});ad2.textContent="📍 "+r.address;info.appendChild(ad2);}
+      top.appendChild(info);card.appendChild(top);
+      var stfRow2=div({display:"flex",gap:"5px",marginTop:"6px",flexWrap:"wrap"});
+      (r.stfIds||[]).forEach(function(sid){var s=getStaff(sid);if(!s)return;
+        var sb=div({display:"flex",alignItems:"center",gap:"4px",background:s.color+"18",border:"1px solid "+s.color+"44",borderRadius:"12px",padding:"2px 7px 2px 3px"});
+        sb.appendChild(avEl(s,14));var sn=span({fontSize:"10px",color:s.color,fontWeight:"600"});sn.textContent=s.name.split(" ")[0];sb.appendChild(sn);stfRow2.appendChild(sb);
+      });
+      if(r.visit&&r.address){
+        var mapA=el("a",{href:mapsUrl(r.address),target:"_blank",rel:"noopener noreferrer"});
+        Object.assign(mapA.style,{fontSize:"10px",color:"#5ab4d6",background:"#1a3040",border:"1px solid #5ab4d644",borderRadius:"10px",padding:"2px 8px",textDecoration:"none"});
+        mapA.textContent="🗺 地図";mapA.addEventListener("click",function(e){e.stopPropagation();});stfRow2.appendChild(mapA);
+      }
+      card.appendChild(stfRow2);
+      card.addEventListener("click",function(){
+        var initRf=Object.assign({},r,{_id:r.id,lastName:c?c.lastName:"",firstName:c?c.firstName:""});
+        openResModal(initRf,false);
+      });
+      content.appendChild(card);
+    });
+  }
+
+  // ════ 出張一覧 ════
+  if(S.view==="visit"){
+    var vr=S.res.filter(function(r){return r.visit;}).slice().sort(function(a,b){return a.date===b.date?a.time.localeCompare(b.time):a.date.localeCompare(b.date);});
+    var vt=div({marginBottom:"10px",fontSize:"12px",color:"#5ab4d6"});vt.textContent="🚗 出張予約 "+vr.length+"件";content.appendChild(vt);
+    if(vr.length===0){var vem=div({padding:"40px",textAlign:"center",color:"#2a2a2a",border:"1px solid #1a1a1a",borderRadius:"10px"});vem.textContent="出張予約なし";content.appendChild(vem);}
+    vr.forEach(function(r){
+      var isPast=r.date<toKey(TODAY),c=getCust(r.custId),car=c&&c.cars[r.carIdx||0],svc=getSvc(r.sid);
+      var card=div({background:"#161620",border:"1px solid #5ab4d644",borderRadius:"10px",padding:"12px 14px",cursor:"pointer",marginBottom:"8px",opacity:isPast?"0.6":"1"});
+      var drow=div({display:"flex",alignItems:"center",gap:"8px",marginBottom:"5px"});
+      var dt2=span({fontSize:"12px",fontWeight:"700",color:isPast?"#555":"#5ab4d6"});dt2.textContent=fmtDate(r.date)+" "+r.time;drow.appendChild(dt2);
+      var stB=span({fontSize:"10px",padding:"1px 6px",borderRadius:"8px",fontWeight:"700",background:r.status==="confirmed"?"#4caf5022":"#ffa72622",color:r.status==="confirmed"?"#4caf50":"#ffa726"});stB.textContent=r.status==="confirmed"?"確定":"仮予約";drow.appendChild(stB);
+      card.appendChild(drow);
+      var nh2=div({display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"});
+      var nm3=span({fontWeight:"700",fontSize:"14px"});nm3.textContent=c?c.lastName+" "+c.firstName:"—";nh2.appendChild(nm3);
+      if(car&&car.plate4)nh2.appendChild(plateBadge(car.plate4));
+      card.appendChild(nh2);
+      var sub3=div({fontSize:"12px",color:"#666",marginTop:"2px"});sub3.textContent=(car?car.make:"—")+" / "+(svc?svc.name:"—")+"（"+r.dur+"分）";card.appendChild(sub3);
+      if(r.address){
+        var adrow=div({marginTop:"6px",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"});
+        var adt=span({fontSize:"12px",color:"#5ab4d6"});adt.textContent="📍 "+r.address;adrow.appendChild(adt);
+        var mapA2=el("a",{href:mapsUrl(r.address),target:"_blank",rel:"noopener noreferrer"});
+        Object.assign(mapA2.style,{fontSize:"11px",color:"#5ab4d6",background:"#1a3040",border:"1px solid #5ab4d644",borderRadius:"10px",padding:"2px 9px",textDecoration:"none"});
+        mapA2.textContent="🗺 地図";mapA2.addEventListener("click",function(e){e.stopPropagation();});adrow.appendChild(mapA2);
+        card.appendChild(adrow);
+      }
+      var stfRow3=div({display:"flex",gap:"5px",marginTop:"6px",flexWrap:"wrap"});
+      (r.stfIds||[]).forEach(function(sid){var s=getStaff(sid);if(!s)return;
+        var sb=div({display:"flex",alignItems:"center",gap:"3px",background:s.color+"18",border:"1px solid "+s.color+"44",borderRadius:"12px",padding:"2px 7px 2px 3px"});
+        sb.appendChild(avEl(s,14));var sn=span({fontSize:"10px",color:s.color,fontWeight:"600"});sn.textContent=s.name.split(" ")[0];sb.appendChild(sn);stfRow3.appendChild(sb);
+      });
+      card.appendChild(stfRow3);
+      card.addEventListener("click",function(){
+        var initRf=Object.assign({},r,{_id:r.id,lastName:c?c.lastName:"",firstName:c?c.firstName:""});
+        openResModal(initRf,false);
+      });
+      content.appendChild(card);
+    });
+  }
+
+  // ════ SHIFT ════
+  if(S.view==="shift"){
+    var md=monthDays();
+    var mnav=div({display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"});
+    var pb2=btn("‹",{background:"none",border:"1px solid #252525",borderRadius:"6px",color:"#777",padding:"4px 10px",cursor:"pointer",fontSize:"15px"},function(){S.moff=Math.max(0,S.moff-1);render();});
+    var mlbl=span({fontWeight:"700",fontSize:"14px",minWidth:"88px",textAlign:"center"});
+    var bDate=new Date(TODAY.getFullYear(),TODAY.getMonth()+S.moff,1);
+    mlbl.textContent=bDate.getFullYear()+"年"+(bDate.getMonth()+1)+"月";
+    var nb2=btn("›",{background:"none",border:"1px solid #252525",borderRadius:"6px",color:"#777",padding:"4px 10px",cursor:"pointer",fontSize:"15px"},function(){S.moff=Math.min(1,S.moff+1);render();});
+    mnav.appendChild(pb2);mnav.appendChild(mlbl);mnav.appendChild(nb2);content.appendChild(mnav);
+    var tw=div({overflowX:"auto"});
+    var tbl=document.createElement("table");tbl.style.borderCollapse="collapse";tbl.style.minWidth=(148+md.length*50)+"px";
+    var thead=document.createElement("thead"),hrow=document.createElement("tr");
+    var th0=document.createElement("th");Object.assign(th0.style,{width:"148px",padding:"7px 10px",textAlign:"left",fontSize:"11px",color:"#444",background:"#111",position:"sticky",left:"0",zIndex:"10",borderBottom:"1px solid #1e1e1e"});th0.textContent="スタッフ";hrow.appendChild(th0);
+    md.forEach(function(d){
+      var wd=d.getDay(),isT=sameDay(d,TODAY);
+      var th=document.createElement("th");Object.assign(th.style,{minWidth:"48px",padding:"3px 1px",textAlign:"center",fontSize:"10px",color:wd===0?"#E84545":wd===6?"#5599ff":"#484848",background:isT?"#1a1010":"#111",borderBottom:"1px solid #1a1a1a",borderLeft:"1px solid #181818"});
+      var dn=div({fontWeight:isT?"800":"400"});dn.textContent=d.getDate();th.appendChild(dn);var dw2=div({fontSize:"9px"});dw2.textContent=jpDay(d);th.appendChild(dw2);hrow.appendChild(th);
+    });
+    thead.appendChild(hrow);tbl.appendChild(thead);
+    var tbody=document.createElement("tbody");
+    activeStaff().forEach(function(s,si){
+      var tr3=document.createElement("tr"),bg=si%2===0?"#111":"#131313";tr3.style.background=bg;
+      var td0=document.createElement("td");Object.assign(td0.style,{padding:"6px 10px",position:"sticky",left:"0",background:bg,zIndex:"5",borderBottom:"1px solid #1a1a1a"});
+      var stCell=div({display:"flex",alignItems:"center",gap:"6px"});stCell.appendChild(avEl(s,20));
+      var sInfo=div({});var sNm=div({fontSize:"12px",fontWeight:"600"});sNm.textContent=s.name;sInfo.appendChild(sNm);
+      if(S.role==="manager"){
+        var qRow=div({display:"flex",gap:"3px",marginTop:"2px"});
+        var allOut=btn("全出",{fontSize:"9px",padding:"1px 4px",borderRadius:"3px",border:"1px solid #2a2a2a",background:"transparent",color:"#4caf50",cursor:"pointer"},function(){
+          md.forEach(function(d){var k=toKey(d);if(!S.shifts[k])S.shifts[k]={};S.shifts[k][s.id]={start:"09:00",end:"18:00"};});save(SK.shift,S.shifts);render();
+        });
+        var allOff=btn("全休",{fontSize:"9px",padding:"1px 4px",borderRadius:"3px",border:"1px solid #2a2a2a",background:"transparent",color:"#E84545",cursor:"pointer"},function(){
+          md.forEach(function(d){var k=toKey(d);if(!S.shifts[k])S.shifts[k]={};S.shifts[k][s.id]=null;});save(SK.shift,S.shifts);render();
+        });
+        qRow.appendChild(allOut);qRow.appendChild(allOff);sInfo.appendChild(qRow);
+      }
+      stCell.appendChild(sInfo);td0.appendChild(stCell);tr3.appendChild(td0);
+      md.forEach(function(d){
+        var key=toKey(d),shift=(S.shifts[key]||{})[s.id],isT=sameDay(d,TODAY);
+        var td=document.createElement("td");Object.assign(td.style,{textAlign:"center",padding:"2px 1px",borderLeft:"1px solid #181818",borderBottom:"1px solid #181818",cursor:S.role==="manager"?"pointer":"default",background:isT?"rgba(232,69,69,0.04)":"transparent"});
+        if(shift){
+          var sv=div({fontSize:"9px",color:s.color,fontWeight:"700",lineHeight:"1.4"});
+          [shift.start,"〜",shift.end].forEach(function(t){var l=div({color:t==="〜"?"#2a2a2a":s.color});l.textContent=t;sv.appendChild(l);});
+          td.appendChild(sv);
+        }else{var dash=div({fontSize:"11px",color:"#252525"});dash.textContent="—";td.appendChild(dash);}
+        if(S.role==="manager")td.addEventListener("click",function(){openShiftCell(key,s.id);});
+        tr3.appendChild(td);
+      });
+      tbody.appendChild(tr3);
+    });
+    tbl.appendChild(tbody);tw.appendChild(tbl);content.appendChild(tw);
+    var cards=div({display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:"7px",marginTop:"14px"});
+    activeStaff().forEach(function(s){
+      var wd=md.filter(function(d){return !!(S.shifts[toKey(d)]||{})[s.id];}).length;
+      var sc=div({background:"#161616",border:"1px solid "+s.color+"33",borderRadius:"8px",padding:"10px 12px"});
+      var sct=div({fontSize:"11px",color:s.color,fontWeight:"700",marginBottom:"2px"});sct.textContent=s.name;sc.appendChild(sct);
+      var scn=div({fontSize:"21px",fontWeight:"800"});scn.textContent=wd;sc.appendChild(scn);
+      var scs=div({fontSize:"10px",color:"#444"});scs.textContent="出勤予定日";sc.appendChild(scs);
+      cards.appendChild(sc);
+    });
+    content.appendChild(cards);
+  }
+
+  // ════ 顧客管理 ════
+  if(S.view==="customers"){
+    var searchRow=div({display:"flex",gap:"8px",alignItems:"center",marginBottom:"10px"});
+    var si=tInput(S.custSearch,function(v){S.custSearch=v;render();},"名前・電話・車種・車番号4桁");
+    searchRow.appendChild(si);
+    searchRow.appendChild(pBtn("＋登録","primary",function(){openCustEdit(null);},{whiteSpace:"nowrap",padding:"6px 11px",fontSize:"12px"}));
+    content.appendChild(searchRow);
+    var q=S.custSearch.trim();
+    var fc=q?S.customers.filter(function(c){
+      var full=c.lastName+c.firstName,plates=c.cars.map(function(x){return x.plate4||"";}).join(""),makes=c.cars.map(function(x){return x.make||"";}).join("");
+      return full.includes(q)||c.phone.includes(q)||makes.includes(q)||plates.includes(q);
+    }):S.customers;
+    var ct=div({marginBottom:"7px",fontSize:"11px",color:"#444"});ct.textContent=fc.length+"件";content.appendChild(ct);
+    fc.forEach(function(c){
+      var hist2=custHistory(c.id),last2=hist2[0];
+      var card=div({background:"#161616",border:"1px solid #202020",borderRadius:"10px",padding:"11px 14px",cursor:"pointer",marginBottom:"7px"});
+      var top2=div({display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"8px"});
+      var left=div({flex:"1"});
+      var nh3=div({display:"flex",alignItems:"baseline",gap:"6px",flexWrap:"wrap"});
+      var nm4=span({fontWeight:"800",fontSize:"15px"});nm4.textContent=c.lastName+" "+c.firstName;nh3.appendChild(nm4);
+      if(c.phone){var ph2=span({fontSize:"11px",color:"#555"});ph2.textContent=c.phone;nh3.appendChild(ph2);}
+      left.appendChild(nh3);
+      c.cars.forEach(function(car){
+        var cr=div({display:"flex",alignItems:"center",gap:"5px",marginTop:"2px"});
+        var mk=span({fontSize:"12px",color:"#666"});mk.textContent=car.make;cr.appendChild(mk);
+        if(car.plate4)cr.appendChild(plateBadge(car.plate4));
+        left.appendChild(cr);
+      });
+      if(c.cars.length===0){var nc2=div({fontSize:"12px",color:"#333",marginTop:"2px"});nc2.textContent="車両未登録";left.appendChild(nc2);}
+      if(last2){var lt=div({fontSize:"11px",color:"#3a3a3a",marginTop:"3px"});lt.textContent="最終: "+fmtDate(last2.date);left.appendChild(lt);}
+      top2.appendChild(left);
+      var right=div({textAlign:"right",flexShrink:"0"});
+      var cnt=div({fontSize:"19px",fontWeight:"800",color:"#E84545"});cnt.textContent=hist2.length;right.appendChild(cnt);
+      var cntl=div({fontSize:"10px",color:"#444"});cntl.textContent="来店";right.appendChild(cntl);
+      top2.appendChild(right);card.appendChild(top2);
+      card.addEventListener("click",function(){openCustDetail(c);});
+      content.appendChild(card);
+    });
+    if(fc.length===0){var cem=div({padding:"40px",textAlign:"center",color:"#2a2a2a",border:"1px solid #1a1a1a",borderRadius:"10px"});cem.textContent="見つかりません";content.appendChild(cem);}
+  }
+
+  app.appendChild(content);
+}
+
+render();
+
+// ── Service Worker ──
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").catch(function(){});
+}
+</script>
+</body>
+</html>
