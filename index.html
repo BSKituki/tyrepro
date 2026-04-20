@@ -185,6 +185,11 @@ function buildResModal(box,close,rf,isNew,onRfChange){
   var vBtn=el("button",{className:"pbtn",onClick:function(){onRfChange(Object.assign({},rf,{visit:!rf.visit}));}});
   Object.assign(vBtn.style,rf.visit?{background:"#1a3040",color:"#5ab4d6",border:"1px solid #5ab4d666"}:{background:isDark()?"#1a1a1a":"#f0f0ea",color:isDark()?"#555":"#888",border:"1px solid "+(isDark()?"#2a2a2a":"#ccc")});
   vBtn.textContent=rf.visit?"🚗 出張対応":"🏪 店舗対応";form.appendChild(vBtn);
+
+  // 作業済みトグル
+  var doneBtn=el("button",{className:"pbtn",onClick:function(){rf.done=!rf.done;Object.assign(doneBtn.style,rf.done?{background:"#1a3a1a",color:"#4caf50",border:"1px solid #4caf5066",fontWeight:700}:{background:isDark()?"#1a1a1a":"#f0f0ea",color:isDark()?"#555":"#888",border:"1px solid "+(isDark()?"#2a2a2a":"#ccc"),fontWeight:400});doneBtn.textContent=rf.done?"✅ 作業済み":"⬜ 未完了";}});
+  Object.assign(doneBtn.style,rf.done?{background:"#1a3a1a",color:"#4caf50",border:"1px solid #4caf5066",fontWeight:700}:{background:isDark()?"#1a1a1a":"#f0f0ea",color:isDark()?"#555":"#888",border:"1px solid "+(isDark()?"#2a2a2a":"#ccc"),fontWeight:400});
+  doneBtn.textContent=rf.done?"✅ 作業済み":"⬜ 未完了";form.appendChild(doneBtn);
   if(rf.visit){var addrW=div({});var addrL=el("label",{className:"fl"});addrL.textContent="訪問先住所";addrW.appendChild(addrL);var addrI=tInput(rf.address,function(v){rf.address=v;},"例：東京都新宿区西新宿1-1-1");addrW.appendChild(addrI);if(rf.address){var mapA=el("a",{href:mapsUrl(rf.address),target:"_blank",rel:"noopener noreferrer"});Object.assign(mapA.style,{display:"inline-block",marginTop:"5px",fontSize:"11px",color:"#5ab4d6",textDecoration:"none",background:"#1a3040",border:"1px solid #5ab4d644",borderRadius:"8px",padding:"3px 10px"});mapA.textContent="🗺 地図で確認";addrW.appendChild(mapA);}form.appendChild(addrW);}
   var custW=div({});var lnW=div({position:"relative"});var g2=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px"});
   var sugBox=div({position:"absolute",top:"100%",left:0,right:0,background:"var(--bg5)",border:"1px solid var(--border3)",borderRadius:"6px",zIndex:50,maxHeight:"140px",overflowY:"auto"});
@@ -216,7 +221,7 @@ function buildResModal(box,close,rf,isNew,onRfChange){
     if(!rf.lastName.trim()||!rf.firstName.trim())return;
     var svc=getSvc(Number(rf.sid));var dur=svc?svc.dur:rf.dur;var custId=rf.custId;
     if(!custId){var cars=rf.newCarMake&&rf.newCarMake.trim()?[{make:rf.newCarMake.trim(),plate4:rf.newCarPlate4}]:[];var nc={id:Date.now(),lastName:rf.lastName.trim(),firstName:rf.firstName.trim(),cars:cars,phone:"",memo:""};S.customers.push(nc);custId=nc.id;saveCust();}
-    var entry={custId:custId,carIdx:rf.carIdx||0,sid:Number(rf.sid),date:rf.date,time:rf.time,dur:dur,stfIds:rf.stfIds||[1],status:rf.status,memo:rf.memo||"",visit:rf.visit||false,address:rf.address||""};
+    var entry={custId:custId,carIdx:rf.carIdx||0,sid:Number(rf.sid),date:rf.date,time:rf.time,dur:dur,stfIds:rf.stfIds||[1],status:rf.status,done:rf.done||false,memo:rf.memo||"",visit:rf.visit||false,address:rf.address||""};
     if(isNew){S.res.push(Object.assign({id:Date.now()},entry));}else{S.res=S.res.map(function(r){return r.id==rf._id?Object.assign({id:rf._id},entry):r;});}
     saveRes();close();render();
   },{flex:2}));
@@ -295,7 +300,7 @@ function render(){
   var roleRow=div({display:"flex",background:"var(--bg4)",borderRadius:"6px",overflow:"hidden",border:"1px solid var(--border)"});
   [["manager","管理者"],["staff","スタッフ"]].forEach(function(p){var rb=el("button",{onClick:function(){S.role=p[0];render();}});Object.assign(rb.style,{padding:"4px 9px",fontSize:"11px",border:"none",cursor:"pointer",fontFamily:"inherit",background:S.role===p[0]?"#E84545":"transparent",color:S.role===p[0]?"#fff":isDark()?"#555":"#888",fontWeight:S.role===p[0]?700:400});rb.textContent=p[1];roleRow.appendChild(rb);});
   tb.appendChild(roleRow);
-  tb.appendChild(pBtn("＋予約","primary",function(){var as=activeStaff(),av=activeSvcs();var rf={custId:null,lastName:"",firstName:"",carIdx:0,newCarMake:"",newCarPlate4:"",sid:av[0]?av[0].id:1,date:S.selDate,time:"09:00",dur:av[0]?av[0].dur:60,stfIds:as[0]?[as[0].id]:[],status:"confirmed",memo:"",visit:false,address:""};openResModal(rf,true);},{fontSize:"12px",padding:"5px 11px"}));
+  tb.appendChild(pBtn("＋予約","primary",function(){var as=activeStaff(),av=activeSvcs();var rf={custId:null,lastName:"",firstName:"",carIdx:0,newCarMake:"",newCarPlate4:"",sid:av[0]?av[0].id:1,date:S.selDate,time:"09:00",dur:av[0]?av[0].dur:60,stfIds:as[0]?[as[0].id]:[],status:"confirmed",done:false,memo:"",visit:false,address:""};openResModal(rf,true);},{fontSize:"12px",padding:"5px 11px"}));
   app.appendChild(tb);
 
   // NAV
@@ -318,7 +323,20 @@ function render(){
     var grid=div({display:"grid",gridTemplateColumns:"48px repeat("+as.length+",minmax(120px,1fr))",minWidth:"300px"});
     grid.appendChild(div({}));
     as.forEach(function(s){var hd=div({height:"42px",display:"flex",alignItems:"center",justifyContent:"center",gap:"5px",borderBottom:"1px solid var(--sep)"});hd.appendChild(avEl(s,22));var sn=span({fontSize:"11px",fontWeight:"700"});sn.textContent=s.name.split(" ")[0];hd.appendChild(sn);grid.appendChild(hd);});
-    var timeCol=div({});SLOTS.forEach(function(t){var tr=div({height:"48px",display:"flex",alignItems:"flex-start",paddingTop:"3px",justifyContent:"flex-end",paddingRight:"5px"});var ts=span({fontSize:"9px",color:"var(--text4)"});ts.textContent=t;tr.appendChild(ts);timeCol.appendChild(tr);});grid.appendChild(timeCol);
+    var timeCol=div({});SLOTS.forEach(function(t){var tr=div({height:"48px",display:"flex",alignItems:"flex-start",paddingTop:"3px",justifyContent:"flex-end",paddingRight:"5px"});var ts=span({fontSize:"9px",color:"var(--text4)"});ts.textContent=t;tr.appendChild(ts);timeCol.appendChild(tr);});
+    // 時間軸に現在時刻ラベル
+    if(S.selDate===toKey(TODAY)){
+      var nowN=new Date();var nowMinsN=nowN.getHours()*60+nowN.getMinutes();
+      if(nowMinsN>=9*60&&nowMinsN<=18*60){
+        var nowTopN=((nowMinsN-9*60)/30)*48;
+        var nowLblWrap=div({position:"absolute",right:"3px",zIndex:12,pointerEvents:"none"});
+        nowLblWrap.style.top=(nowTopN-8)+"px";
+        var nowLbl=span({fontSize:"9px",fontWeight:"700",color:"#E84545",background:isDark()?"#0d0d0d":"#f5f5f0",padding:"0 2px"});
+        nowLbl.textContent=pad2(nowN.getHours())+":"+pad2(nowN.getMinutes());
+        nowLblWrap.appendChild(nowLbl);timeCol.style.position="relative";timeCol.appendChild(nowLblWrap);
+      }
+    }
+    grid.appendChild(timeCol);
     as.forEach(function(s){
       var sRes=todayRes().filter(function(r){return r.stfIds&&r.stfIds.indexOf(s.id)!==-1;});
       var shift=(S.shifts[S.selDate]||{})[s.id];
@@ -326,7 +344,34 @@ function render(){
       SLOTS.forEach(function(t){col.appendChild(div({height:"48px",borderBottom:"1px solid "+(isDark()?"#141414":"#eee")}));});
       if(shift){var top2=(t2m(shift.start)-9*60)/30*48,h2=(t2m(shift.end)-9*60)/30*48-top2;var shd=div({position:"absolute",left:0,right:0,background:isDark()?"rgba(255,255,255,0.018)":"rgba(0,0,0,0.03)",borderLeft:"3px solid "+s.color+"44"});shd.style.top=top2+"px";shd.style.height=h2+"px";col.appendChild(shd);}
       else{var off=div({position:"absolute",inset:0,background:"repeating-linear-gradient(45deg,transparent,transparent 6px,"+(isDark()?"rgba(255,255,255,0.01)":"rgba(0,0,0,0.03)")+" 6px,"+(isDark()?"rgba(255,255,255,0.01)":"rgba(0,0,0,0.03)")+" 12px)",pointerEvents:"none"});var offT=div({textAlign:"center",paddingTop:"60px",fontSize:"10px",color:"var(--text5)"});offT.textContent="休";off.appendChild(offT);col.appendChild(off);}
-      sRes.forEach(function(r){var rtop=(t2m(r.time)-9*60)/30*48,rh=(r.dur/30)*48-4;var rb=div({position:"absolute",left:"4px",right:"4px",background:r.visit?"#1a3a4a":s.color,borderRadius:"6px",padding:"3px 6px",cursor:"pointer",overflow:"hidden"});rb.style.top=(rtop+2)+"px";rb.style.height=rh+"px";rb.style.opacity=r.status==="pending"?"0.72":"1";rb.style.border=r.visit?"2px solid #5ab4d6":r.status==="pending"?"1px dashed rgba(255,255,255,.3)":"none";var c=getCust(r.custId),car=c&&c.cars&&c.cars[r.carIdx||0],svc=getSvc(r.sid);var rn=div({fontSize:"10px",fontWeight:"700",color:"#fff",lineHeight:"1.3"});rn.textContent=(r.visit?"🚗 ":"")+(c?c.lastName+c.firstName:"—");rb.appendChild(rn);var rs=div({fontSize:"9px",color:"rgba(255,255,255,.8)"});rs.textContent=r.time+"・"+(svc?svc.name:"—");rb.appendChild(rs);if(car&&car.plate4){var rp=div({fontSize:"9px",color:"rgba(255,255,255,.65)"});rp.textContent="["+car.plate4+"]";rb.appendChild(rp);}rb.addEventListener("click",function(){var initRf=Object.assign({},r,{_id:r.id,lastName:c?c.lastName:"",firstName:c?c.firstName:""});openResModal(initRf,false);});col.appendChild(rb);});grid.appendChild(col);});
+      sRes.forEach(function(r){var rtop=(t2m(r.time)-9*60)/30*48,rh=(r.dur/30)*48-4;
+        var bgColor=r.done?"#2a2a2a":r.visit?"#1a3a4a":s.color;
+        var rb=div({position:"absolute",left:"4px",right:"4px",background:bgColor,borderRadius:"6px",padding:"3px 6px",cursor:"pointer",overflow:"hidden"});
+        rb.style.top=(rtop+2)+"px";rb.style.height=rh+"px";
+        rb.style.opacity=r.status==="pending"?"0.72":"1";
+        rb.style.border=r.done?"2px solid #4caf50":r.visit?"2px solid #5ab4d6":r.status==="pending"?"1px dashed rgba(255,255,255,.3)":"none";
+        var c=getCust(r.custId),car=c&&c.cars&&c.cars[r.carIdx||0],svc=getSvc(r.sid);
+        var rn=div({fontSize:"10px",fontWeight:"700",color:r.done?"#4caf50":"#fff",lineHeight:"1.3"});
+        rn.textContent=(r.done?"✅ ":r.visit?"🚗 ":"")+(c?c.lastName+c.firstName:"—");rb.appendChild(rn);
+        var rs=div({fontSize:"9px",color:r.done?"rgba(76,175,80,.8)":"rgba(255,255,255,.8)"});rs.textContent=r.time+"・"+(svc?svc.name:"—");rb.appendChild(rs);
+        if(car&&car.plate4){var rp=div({fontSize:"9px",color:r.done?"rgba(76,175,80,.65)":"rgba(255,255,255,.65)"});rp.textContent="["+car.plate4+"]";rb.appendChild(rp);}
+        rb.addEventListener("click",function(){var initRf=Object.assign({},r,{_id:r.id,lastName:c?c.lastName:"",firstName:c?c.firstName:""});openResModal(initRf,false);});
+        col.appendChild(rb);});
+      // 現在時刻ライン（今日かつ9〜18時の範囲）
+      if(S.selDate===toKey(TODAY)){
+        var now=new Date();
+        var nowMins=now.getHours()*60+now.getMinutes();
+        if(nowMins>=9*60&&nowMins<=18*60){
+          var nowTop=((nowMins-9*60)/30)*48;
+          var nowLine=div({position:"absolute",left:0,right:0,height:"2px",background:"#E84545",zIndex:10,pointerEvents:"none"});
+          nowLine.style.top=nowTop+"px";
+          // 丸ドット
+          var nowDot=div({position:"absolute",width:"8px",height:"8px",borderRadius:"50%",background:"#E84545",left:"-4px",zIndex:11,pointerEvents:"none"});
+          nowDot.style.top=(nowTop-3)+"px";
+          col.appendChild(nowLine);col.appendChild(nowDot);
+        }
+      }
+      grid.appendChild(col);});
     tl.appendChild(grid);content.appendChild(tl);
   }
 
@@ -417,11 +462,20 @@ function render(){
 // ── 予約カード共通レンダラー ──
 function renderResCard(r,container){
   var c=getCust(r.custId),car=c&&c.cars&&c.cars[r.carIdx||0],svc=getSvc(r.sid);
-  var card=div({background:"var(--bg3)",borderRadius:"10px",padding:"11px 14px",cursor:"pointer",marginBottom:"7px",borderLeft:r.visit?"3px solid #5ab4d6":"3px solid transparent",border:r.visit?"1px solid #5ab4d644":"1px solid var(--card-border)"});
-  var top=div({display:"flex",alignItems:"flex-start",gap:"9px"});var tm=div({fontSize:"17px",fontWeight:"800",color:r.visit?"#5ab4d6":"#E84545",minWidth:"50px"});tm.textContent=r.time;top.appendChild(tm);
-  var info=div({flex:"1"});var nh=div({display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"});var nm=span({fontWeight:"700",fontSize:"14px"});nm.textContent=c?c.lastName+" "+c.firstName:"—";nh.appendChild(nm);
-  if(car&&car.plate4)nh.appendChild(plateBadge(car.plate4));if(r.visit)nh.appendChild(visitBadge());
-  var stBadge=span({fontSize:"10px",padding:"2px 6px",borderRadius:"10px",fontWeight:"700",background:r.status==="confirmed"?"#4caf5022":"#ffa72622",color:r.status==="confirmed"?"#4caf50":"#ffa726"});stBadge.textContent=r.status==="confirmed"?"確定":"仮予約";nh.appendChild(stBadge);
+  var isDone=r.done||false;
+  var card=div({background:isDone?(isDark()?"#141a14":"#f0f8f0"):("var(--bg3)"),borderRadius:"10px",padding:"11px 14px",cursor:"pointer",marginBottom:"7px",
+    borderLeft:isDone?"3px solid #4caf50":r.visit?"3px solid #5ab4d6":"3px solid transparent",
+    border:isDone?"1px solid #4caf5044":r.visit?"1px solid #5ab4d644":"1px solid var(--card-border)"});
+  var top=div({display:"flex",alignItems:"flex-start",gap:"9px"});
+  var tm=div({fontSize:"17px",fontWeight:"800",color:isDone?"#4caf50":r.visit?"#5ab4d6":"#E84545",minWidth:"50px"});
+  tm.textContent=r.time;top.appendChild(tm);
+  var info=div({flex:"1"});var nh=div({display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"});
+  var nm=span({fontWeight:"700",fontSize:"14px",color:isDone?"var(--text3)":"var(--text)",textDecoration:isDone?"line-through":""});
+  nm.textContent=c?c.lastName+" "+c.firstName:"—";nh.appendChild(nm);
+  if(car&&car.plate4)nh.appendChild(plateBadge(car.plate4));
+  if(r.visit)nh.appendChild(visitBadge());
+  if(isDone){var doneBadge=span({fontSize:"10px",padding:"2px 7px",borderRadius:"10px",background:"#4caf5022",color:"#4caf50",fontWeight:700});doneBadge.textContent="✅ 作業済み";nh.appendChild(doneBadge);}
+  else{var stBadge=span({fontSize:"10px",padding:"2px 6px",borderRadius:"10px",fontWeight:"700",background:r.status==="confirmed"?"#4caf5022":"#ffa72622",color:r.status==="confirmed"?"#4caf50":"#ffa726"});stBadge.textContent=r.status==="confirmed"?"確定":"仮予約";nh.appendChild(stBadge);}
   info.appendChild(nh);var sub=div({fontSize:"12px",color:"var(--text3)",marginTop:"2px"});sub.textContent=(car?car.make:"—")+" / "+(svc?svc.name:"—")+"（"+r.dur+"分）";info.appendChild(sub);
   if(r.visit&&r.address){var ad=div({fontSize:"11px",color:"#5ab4d6",marginTop:"3px"});ad.textContent="📍 "+r.address;info.appendChild(ad);}
   top.appendChild(info);card.appendChild(top);
