@@ -221,8 +221,17 @@ function showLoginScreen(errMsg){
 
   // バージョン
   var ver=document.createElement("div");
-  ver.style.cssText="text-align:center;font-size:10px;color:"+(isDk?"#333":"#bbb")+";margin-top:24px;";
+  ver.style.cssText="text-align:center;font-size:10px;color:"+(isDk?"#333":"#bbb")+";margin-top:24px;margin-bottom:8px;";
   ver.textContent="Ver. "+APP_VER+" • 真砂商店 乾物工房";card.appendChild(ver);
+  var legalLinks=document.createElement("div");
+  legalLinks.style.cssText="display:flex;justify-content:center;gap:16px;";
+  var tosLink=document.createElement("span");
+  tosLink.style.cssText="font-size:10px;color:"+(isDk?"#444":"#bbb")+";cursor:pointer;text-decoration:underline;";
+  tosLink.textContent="利用規約";tosLink.addEventListener("click",openTerms);legalLinks.appendChild(tosLink);
+  var ppLink=document.createElement("span");
+  ppLink.style.cssText="font-size:10px;color:"+(isDk?"#444":"#bbb")+";cursor:pointer;text-decoration:underline;";
+  ppLink.textContent="プライバシーポリシー";ppLink.addEventListener("click",openPrivacy);legalLinks.appendChild(ppLink);
+  card.appendChild(legalLinks);
 
   wrap.appendChild(card);app.appendChild(wrap);
   setTimeout(function(){emailInput.focus();},100);
@@ -448,6 +457,87 @@ function openBackupModal(){
   });
 }
 
+
+// ── 利用規約モーダル ──
+function openTerms(){
+  openOverlay(function(box,close){
+    stitle(box,"利用規約");
+    var wrap=div({fontSize:"12px",color:"var(--text2)",lineHeight:"1.9",maxHeight:"60vh",overflowY:"auto",paddingRight:"4px"});
+
+    var sections=[
+      {h:"第1条（本規約の適用）",
+       p:"本利用規約（以下「本規約」）は、真砂商店 乾物工房（以下「当社」）が提供する業務管理アプリケーション「TYRE PRO Scheduler」（以下「本サービス」）の利用に関する条件を定めるものです。ユーザーは本規約に同意したうえで本サービスをご利用ください。"},
+      {h:"第2条（サービスの内容）",
+       p:"本サービスは、タイヤ交換店を対象とした予約・顧客・スタッフ・シフト管理を目的としたウェブアプリケーションです。Firebase Realtime Databaseを利用したリアルタイムデータ同期機能を提供します。"},
+      {h:"第3条（利用登録）",
+       p:"本サービスの利用には、当社が発行するアカウント（メールアドレスおよびパスワード）が必要です。アカウント情報の管理はユーザーの責任において行うものとし、第三者への譲渡・貸与を禁じます。"},
+      {h:"第4条（禁止事項）",
+       p:"ユーザーは以下の行為を行ってはなりません。\n① 本サービスの逆コンパイル・リバースエンジニアリング\n② 他のユーザーへの迷惑行為\n③ 虚偽の情報の登録\n④ 本サービスの運営を妨害する行為\n⑤ 法令または公序良俗に違反する行為"},
+      {h:"第5条（データの取り扱い）",
+       p:"ユーザーが本サービスに入力したデータはFirebase（Google LLC）のサーバーに保存されます。当社はデータの保全に努めますが、不可抗力によるデータ消失について一切の責任を負いません。定期的なバックアップを推奨します。"},
+      {h:"第6条（サービスの変更・停止）",
+       p:"当社は事前の通知なく、本サービスの内容を変更または停止することがあります。これによりユーザーに生じた損害について、当社は責任を負いません。"},
+      {h:"第7条（免責事項）",
+       p:"当社は本サービスの利用によって生じた損害（データの消失・業務の中断等を含む）について、当社の故意または重過失による場合を除き、一切の責任を負いません。"},
+      {h:"第8条（規約の変更）",
+       p:"当社は必要に応じて本規約を変更することがあります。変更後の規約はアプリ内に掲示した時点で効力を生じます。"},
+      {h:"第9条（準拠法・管轄）",
+       p:"本規約は日本法に準拠し、本サービスに関する紛争については、当社所在地を管轄する裁判所を第一審の専属的合意管轄裁判所とします。"},
+      {h:"附則",
+       p:"制定日：2026年4月22日\n運営：真砂商店 乾物工房"},
+    ];
+
+    sections.forEach(function(sec){
+      var h=div({fontSize:"13px",fontWeight:700,color:"var(--text)",marginTop:"16px",marginBottom:"4px"});
+      h.textContent=sec.h;wrap.appendChild(h);
+      var p=div({whiteSpace:"pre-line"});p.textContent=sec.p;wrap.appendChild(p);
+    });
+
+    box.appendChild(wrap);
+    box.appendChild(div({marginTop:"16px"},[pBtn("閉じる","primary",close,{width:"100%"})]));
+  });
+}
+
+// ── プライバシーポリシーモーダル ──
+function openPrivacy(){
+  openOverlay(function(box,close){
+    stitle(box,"プライバシーポリシー");
+    var wrap=div({fontSize:"12px",color:"var(--text2)",lineHeight:"1.9",maxHeight:"60vh",overflowY:"auto",paddingRight:"4px"});
+
+    var sections=[
+      {h:"1. 事業者情報",
+       p:"名称：真砂商店 乾物工房\nサービス名：TYRE PRO Scheduler"},
+      {h:"2. 収集する情報",
+       p:"本サービスでは以下の情報を収集・保存します。\n・ アカウント情報（メールアドレス）\n・ 業務データ（顧客情報・予約情報・スタッフ情報・シフト情報）\n・ アプリ利用に関するログ情報"},
+      {h:"3. 情報の利用目的",
+       p:"収集した情報は以下の目的で利用します。\n・ 本サービスの提供および運営\n・ ユーザーサポートへの対応\n・ サービス改善のための分析"},
+      {h:"4. 第三者提供",
+       p:"当社は、以下の場合を除きユーザーの情報を第三者に提供しません。\n・ ユーザーの同意がある場合\n・ 法令に基づく開示が必要な場合\n・ 人の生命・身体・財産の保護のため必要な場合"},
+      {h:"5. 委託先（Firebase）",
+       p:"本サービスはデータの保存にGoogle LLC提供のFirebase Realtime Databaseを利用しています。Googleのプライバシーポリシーが適用されます。\nhttps://policies.google.com/privacy"},
+      {h:"6. 個人情報の管理",
+       p:"収集した顧客情報等はFirebaseのセキュリティ機能により保護されます。不正アクセス防止のため、認証機能を導入しています。"},
+      {h:"7. 情報の保存期間",
+       p:"ユーザーが削除するまで、またはサービス終了まで保存します。サービス終了時には30日前に通知し、データのエクスポート機会を設けます。"},
+      {h:"8. Cookie・ローカルストレージ",
+       p:"本サービスはテーマ設定・バックアップ日時の記録のためにブラウザのlocalStorageを使用します。個人情報は含まれません。"},
+      {h:"9. お問い合わせ",
+       p:"個人情報の取り扱いに関するお問い合わせは、本サービスの管理者（真砂商店 乾物工房）までご連絡ください。"},
+      {h:"10. ポリシーの変更",
+       p:"本ポリシーは必要に応じて改定することがあります。重要な変更はアプリ内でお知らせします。\n\n制定日：2026年4月22日"},
+    ];
+
+    sections.forEach(function(sec){
+      var h=div({fontSize:"13px",fontWeight:700,color:"var(--text)",marginTop:"16px",marginBottom:"4px"});
+      h.textContent=sec.h;wrap.appendChild(h);
+      var p=div({whiteSpace:"pre-line"});p.textContent=sec.p;wrap.appendChild(p);
+    });
+
+    box.appendChild(wrap);
+    box.appendChild(div({marginTop:"16px"},[pBtn("閉じる","primary",close,{width:"100%"})]));
+  });
+}
+
 function openAbout(){openOverlay(function(box,close){
   stitle(box,"このアプリについて");
   var logo=el("img",{src:LOGO_B64,alt:"真砂商店 乾物工房"});Object.assign(logo.style,{width:"140px",height:"140px",objectFit:"contain",display:"block",margin:"0 auto 16px"});box.appendChild(logo);
@@ -459,8 +549,14 @@ function openAbout(){openOverlay(function(box,close){
   var sep2=div({borderTop:"1px solid var(--border2)",margin:"14px 0"});box.appendChild(sep2);
   var copy=div({textAlign:"center",fontSize:"11px",color:"var(--text4)"});copy.textContent="© 2026 真砂商店 乾物工房. All rights reserved.";box.appendChild(copy);
   var sep3=div({borderTop:"1px solid var(--border2)",margin:"14px 0"});box.appendChild(sep3);
+  // バックアップ
   box.appendChild(pBtn("📥 データバックアップ","ghost",function(){close();openBackupModal();},{width:"100%",marginBottom:"8px",fontSize:"13px"}));
-  box.appendChild(div({marginTop:"8px"},[pBtn("閉じる","primary",close,{width:"100%"})]));
+  // 法的文書
+  var legalRow=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"8px"});
+  legalRow.appendChild(pBtn("利用規約","ghost",function(){close();openTerms();},{fontSize:"12px",padding:"8px"}));
+  legalRow.appendChild(pBtn("プライバシーポリシー","ghost",function(){close();openPrivacy();},{fontSize:"12px",padding:"8px"}));
+  box.appendChild(legalRow);
+  box.appendChild(div({marginTop:"4px"},[pBtn("閉じる","primary",close,{width:"100%"})]));
 });}
 
 // ── メイン描画 ──
@@ -491,7 +587,7 @@ function render(){
     });
     userInfo.appendChild(logoutBtn);tb.appendChild(userInfo);
   }
-  if(S.role==="manager"){var mg=div({display:"flex",gap:"5px"});mg.appendChild(pBtn("スタッフ","ghost",openStaffMgr,{fontSize:"11px",padding:"4px 8px"}));mg.appendChild(pBtn("作業","ghost",openSvcMgr,{fontSize:"11px",padding:"4px 8px"}));mg.appendChild(pBtn("📥","ghost",openBackupModal,{fontSize:"13px",padding:"4px 9px",title:"バックアップ"}));tb.appendChild(mg);}
+  if(S.role==="manager"){var mg=div({display:"flex",gap:"5px"});mg.appendChild(pBtn("スタッフ","ghost",openStaffMgr,{fontSize:"11px",padding:"4px 8px"}));mg.appendChild(pBtn("作業","ghost",openSvcMgr,{fontSize:"11px",padding:"4px 8px"}));tb.appendChild(mg);}
   var roleRow=div({display:"flex",background:"var(--bg4)",borderRadius:"6px",overflow:"hidden",border:"1px solid var(--border)"});
   [["manager","管理者"],["staff","スタッフ"]].forEach(function(p){var rb=el("button",{onClick:function(){S.role=p[0];render();}});Object.assign(rb.style,{padding:"4px 9px",fontSize:"11px",border:"none",cursor:"pointer",fontFamily:"inherit",background:S.role===p[0]?"#E84545":"transparent",color:S.role===p[0]?"#fff":isDark()?"#555":"#888",fontWeight:S.role===p[0]?700:400});rb.textContent=p[1];roleRow.appendChild(rb);});
   tb.appendChild(roleRow);
@@ -740,7 +836,11 @@ function render(){
     var infoBox=div({background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",overflow:"hidden"});
     [["運営","真砂商店 乾物工房"],["対応OS","Android / iOS（PWA）"],["データ保存","Firebase Realtime Database"],["リアルタイム共有","複数端末対応"],["開発","Claude (Anthropic)"],["バージョン",APP_VER]].forEach(function(r,i,arr){var row=div({display:"flex",gap:"12px",padding:"11px 14px",borderBottom:i<arr.length-1?"1px solid var(--sep)":"none"});var lbl=span({fontSize:"12px",color:"var(--text3)",minWidth:"100px",flexShrink:0});lbl.textContent=r[0];var val=span({fontSize:"13px",fontWeight:"600"});val.textContent=r[1];row.appendChild(lbl);row.appendChild(val);infoBox.appendChild(row);});
     aBox.appendChild(infoBox);
-    var copy=div({textAlign:"center",fontSize:"11px",color:"var(--text4)",marginTop:"20px"});copy.textContent="© 2026 真砂商店 乾物工房. All rights reserved.";aBox.appendChild(copy);
+    var legalRow2=div({display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginTop:"16px",marginBottom:"8px"});
+    legalRow2.appendChild(pBtn("利用規約","ghost",openTerms,{fontSize:"12px",padding:"8px"}));
+    legalRow2.appendChild(pBtn("プライバシーポリシー","ghost",openPrivacy,{fontSize:"12px",padding:"8px"}));
+    aBox.appendChild(legalRow2);
+    var copy=div({textAlign:"center",fontSize:"11px",color:"var(--text4)",marginTop:"12px"});copy.textContent="© 2026 真砂商店 乾物工房. All rights reserved.";aBox.appendChild(copy);
     content.appendChild(aBox);
   }
 
