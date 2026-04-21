@@ -34,7 +34,7 @@ body.light{--bg:#f5f5f0;--bg2:#ffffff;--bg3:#f0f0ea;--bg4:#e8e8e2;--bg5:#ffffff;
 .nav button.active{color:#E84545;border-bottom-color:#E84545;font-weight:700;}
 .datestrip{padding:9px 14px;display:flex;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .datestrip::-webkit-scrollbar{display:none;}
-.content{padding:0 14px 80px;}
+.content{padding:0 0 80px;}.content > *:not(.tl-wrap){padding-left:14px;padding-right:14px;}.tl-wrap{margin:0;}
 .overlay-bg{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:200;padding:12px;}
 .overlay-box{background:var(--bg5);border:1px solid var(--border3);border-radius:12px;padding:22px;width:100%;max-width:540px;max-height:92vh;overflow-y:auto;}
 .stitle{font-weight:800;font-size:15px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border2);}
@@ -428,60 +428,153 @@ function render(){
 
   // ════ TIMELINE ════
   if(S.view==="timeline"){
-    var as=activeStaff();var tl=div({overflowX:"auto"});
-    var grid=div({display:"grid",gridTemplateColumns:"48px repeat("+as.length+",minmax(120px,1fr))",minWidth:"300px"});
-    grid.appendChild(div({}));
-    as.forEach(function(s){var hd=div({height:"42px",display:"flex",alignItems:"center",justifyContent:"center",gap:"5px",borderBottom:"1px solid var(--sep)"});hd.appendChild(avEl(s,22));var sn=span({fontSize:"11px",fontWeight:"700"});sn.textContent=s.name.split(" ")[0];hd.appendChild(sn);grid.appendChild(hd);});
-    var timeCol=div({});SLOTS.forEach(function(t){var tr=div({height:"48px",display:"flex",alignItems:"flex-start",paddingTop:"3px",justifyContent:"flex-end",paddingRight:"5px"});var ts=span({fontSize:"9px",color:"var(--text4)"});ts.textContent=t;tr.appendChild(ts);timeCol.appendChild(tr);});
-    // 時間軸に現在時刻ラベル
+    var as=activeStaff();
+    var COL_W=140; // スタッフ列幅(px)
+    var TIME_W=52; // 時間軸幅(px)
+    var ROW_H=48;  // 30分ごとの高さ(px)
+    var HDR_H=44;  // ヘッダー高さ(px)
+
+    // 現在時刻計算
+    var nowMinsV=0,showNowLine=false;
     if(S.selDate===toKey(TODAY)){
-      var nowN=new Date();var nowMinsN=nowN.getHours()*60+nowN.getMinutes();
-      if(nowMinsN>=9*60&&nowMinsN<=18*60){
-        var nowTopN=((nowMinsN-9*60)/30)*48;
-        var nowLblWrap=div({position:"absolute",right:"3px",zIndex:12,pointerEvents:"none"});
-        nowLblWrap.style.top=(nowTopN-8)+"px";
-        var nowLbl=span({fontSize:"9px",fontWeight:"700",color:"#E84545",background:isDark()?"#0d0d0d":"#f5f5f0",padding:"0 2px"});
-        nowLbl.textContent=pad2(nowN.getHours())+":"+pad2(nowN.getMinutes());
-        nowLblWrap.appendChild(nowLbl);timeCol.style.position="relative";timeCol.appendChild(nowLblWrap);
-      }
+      var nowDateV=new Date();
+      nowMinsV=nowDateV.getHours()*60+nowDateV.getMinutes();
+      if(nowMinsV>=9*60&&nowMinsV<=18*60)showNowLine=true;
     }
-    grid.appendChild(timeCol);
+    var nowTopPx=showNowLine?((nowMinsV-9*60)/30)*ROW_H:0;
+
+    // ── 外枠（縦横スクロール可・ヘッダー固定用） ──
+    var tlWrap=div({position:"relative",overflow:"auto",
+      maxHeight:"calc(100vh - 160px)",  // 画面高さから上部UIを引いた高さ
+      background:"var(--bg)"});
+    tlWrap.style.WebkitOverflowScrolling="touch";
+    tlWrap.className="tl-wrap";
+
+    var totalW=TIME_W+COL_W*as.length;
+    var totalH=HDR_H+ROW_H*SLOTS.length;
+
+    // ── テーブル全体コンテナ ──
+    var tlInner=div({position:"relative",width:totalW+"px",minWidth:totalW+"px"});
+
+    // ── スタッフ名ヘッダー行（sticky top） ──
+    var hdrRow=div({
+      display:"flex",position:"sticky",top:"0",zIndex:30,
+      background:"var(--bg2)",borderBottom:"2px solid var(--border)"
+    });
+    // 左上コーナー（時間軸固定セル）
+    var corner=div({
+      width:TIME_W+"px",flexShrink:0,height:HDR_H+"px",
+      background:"var(--bg2)",position:"sticky",left:"0",zIndex:40,
+      borderRight:"1px solid var(--border)"
+    });
+    hdrRow.appendChild(corner);
+    // スタッフ名セル
+    as.forEach(function(s){
+      var hd=div({width:COL_W+"px",flexShrink:0,height:HDR_H+"px",
+        display:"flex",alignItems:"center",justifyContent:"center",gap:"5px",
+        borderLeft:"1px solid var(--sep)"});
+      hd.appendChild(avEl(s,24));
+      var sn=span({fontSize:"12px",fontWeight:"700"});
+      sn.textContent=s.name;hd.appendChild(sn);
+      hdrRow.appendChild(hd);
+    });
+    tlInner.appendChild(hdrRow);
+
+    // ── ボディ行（時間軸 + スタッフ列） ──
+    var bodyRow=div({display:"flex",position:"relative"});
+
+    // 時間軸列（sticky left）
+    var timeAxisCol=div({
+      width:TIME_W+"px",flexShrink:0,position:"sticky",left:"0",zIndex:20,
+      background:"var(--bg2)",borderRight:"1px solid var(--border)"
+    });
+    timeAxisCol.style.position="sticky";
+    SLOTS.forEach(function(t){
+      var tc=div({height:ROW_H+"px",display:"flex",alignItems:"flex-start",
+        paddingTop:"3px",justifyContent:"flex-end",paddingRight:"5px"});
+      var ts=span({fontSize:"9px",color:"var(--text4)"});ts.textContent=t;tc.appendChild(ts);
+      timeAxisCol.appendChild(tc);
+    });
+    // 時間軸の現在時刻ラベル
+    if(showNowLine){
+      var nowLblWrap=div({position:"absolute",right:"3px",zIndex:22,pointerEvents:"none"});
+      nowLblWrap.style.top=(nowTopPx-8)+"px";
+      var nowLbl=span({fontSize:"9px",fontWeight:"700",color:"#E84545",
+        background:"var(--bg2)",padding:"0 2px"});
+      nowLbl.textContent=pad2(Math.floor(nowMinsV/60))+":"+pad2(nowMinsV%60);
+      nowLblWrap.appendChild(nowLbl);
+      timeAxisCol.style.position="relative";
+      timeAxisCol.appendChild(nowLblWrap);
+      timeAxisCol.style.position="sticky";
+    }
+    bodyRow.appendChild(timeAxisCol);
+
+    // スタッフ列
     as.forEach(function(s){
       var sRes=todayRes().filter(function(r){return r.stfIds&&r.stfIds.indexOf(s.id)!==-1;});
       var shift=(S.shifts[S.selDate]||{})[s.id];
-      var col=div({position:"relative",borderLeft:"1px solid var(--sep)"});
-      SLOTS.forEach(function(t){col.appendChild(div({height:"48px",borderBottom:"1px solid "+(isDark()?"#141414":"#eee")}));});
-      if(shift){var top2=(t2m(shift.start)-9*60)/30*48,h2=(t2m(shift.end)-9*60)/30*48-top2;var shd=div({position:"absolute",left:0,right:0,background:isDark()?"rgba(255,255,255,0.018)":"rgba(0,0,0,0.03)",borderLeft:"3px solid "+s.color+"44"});shd.style.top=top2+"px";shd.style.height=h2+"px";col.appendChild(shd);}
-      else{var off=div({position:"absolute",inset:0,background:"repeating-linear-gradient(45deg,transparent,transparent 6px,"+(isDark()?"rgba(255,255,255,0.01)":"rgba(0,0,0,0.03)")+" 6px,"+(isDark()?"rgba(255,255,255,0.01)":"rgba(0,0,0,0.03)")+" 12px)",pointerEvents:"none"});var offT=div({textAlign:"center",paddingTop:"60px",fontSize:"10px",color:"var(--text5)"});offT.textContent="休";off.appendChild(offT);col.appendChild(off);}
-      sRes.forEach(function(r){var rtop=(t2m(r.time)-9*60)/30*48,rh=(r.dur/30)*48-4;
+      var col=div({width:COL_W+"px",flexShrink:0,position:"relative",
+        borderLeft:"1px solid var(--sep)"});
+      // グリッド線
+      SLOTS.forEach(function(t){col.appendChild(div({height:ROW_H+"px",
+        borderBottom:"1px solid "+(isDark()?"#141414":"#eee")}));});
+      // シフト背景
+      if(shift){
+        var top2=(t2m(shift.start)-9*60)/30*ROW_H,h2=(t2m(shift.end)-9*60)/30*ROW_H-top2;
+        var shd=div({position:"absolute",left:0,right:0,
+          background:isDark()?"rgba(255,255,255,0.018)":"rgba(0,0,0,0.03)",
+          borderLeft:"3px solid "+s.color+"44"});
+        shd.style.top=top2+"px";shd.style.height=h2+"px";col.appendChild(shd);
+      }else{
+        var off=div({position:"absolute",inset:0,
+          background:"repeating-linear-gradient(45deg,transparent,transparent 6px,"+
+            (isDark()?"rgba(255,255,255,0.01)":"rgba(0,0,0,0.03)")+" 6px,"+
+            (isDark()?"rgba(255,255,255,0.01)":"rgba(0,0,0,0.03)")+" 12px)",
+          pointerEvents:"none"});
+        var offT=div({textAlign:"center",paddingTop:"60px",fontSize:"10px",color:"var(--text5)"});
+        offT.textContent="休";off.appendChild(offT);col.appendChild(off);
+      }
+      // 予約ブロック
+      sRes.forEach(function(r){
+        var rtop=(t2m(r.time)-9*60)/30*ROW_H,rh=(r.dur/30)*ROW_H-4;
         var bgColor=r.done?"#2a2a2a":r.visit?"#1a3a4a":s.color;
-        var rb=div({position:"absolute",left:"4px",right:"4px",background:bgColor,borderRadius:"6px",padding:"3px 6px",cursor:"pointer",overflow:"hidden"});
+        var rb=div({position:"absolute",left:"4px",right:"4px",background:bgColor,
+          borderRadius:"6px",padding:"4px 8px",cursor:"pointer",overflow:"hidden"});
         rb.style.top=(rtop+2)+"px";rb.style.height=rh+"px";
         rb.style.opacity=r.status==="pending"?"0.72":"1";
-        rb.style.border=r.done?"2px solid #4caf50":r.visit?"2px solid #5ab4d6":r.status==="pending"?"1px dashed rgba(255,255,255,.3)":"none";
-        var c=getCust(r.custId),car=c&&c.cars&&c.cars[r.carIdx||0],svc=getSvc(r.sid);
-        var rn=div({fontSize:"10px",fontWeight:"700",color:r.done?"#4caf50":"#fff",lineHeight:"1.3"});
-        rn.textContent=(r.done?"✅ ":r.visit?"🚗 ":"")+(c?c.lastName+c.firstName:"—");rb.appendChild(rn);
-        var rs=div({fontSize:"9px",color:r.done?"rgba(76,175,80,.8)":"rgba(255,255,255,.8)"});rs.textContent=r.time+"・"+(svc?svc.name:"—");rb.appendChild(rs);
-        if(car&&car.plate4){var rp=div({fontSize:"9px",color:r.done?"rgba(76,175,80,.65)":"rgba(255,255,255,.65)"});rp.textContent="["+car.plate4+"]";rb.appendChild(rp);}
-        rb.addEventListener("click",function(){var initRf=Object.assign({},r,{_id:r.id,lastName:c?c.lastName:"",firstName:c?c.firstName:""});openResModal(initRf,false);});
-        col.appendChild(rb);});
-      // 現在時刻ライン（今日かつ9〜18時の範囲）
-      if(S.selDate===toKey(TODAY)){
-        var now=new Date();
-        var nowMins=now.getHours()*60+now.getMinutes();
-        if(nowMins>=9*60&&nowMins<=18*60){
-          var nowTop=((nowMins-9*60)/30)*48;
-          var nowLine=div({position:"absolute",left:0,right:0,height:"2px",background:"#E84545",zIndex:10,pointerEvents:"none"});
-          nowLine.style.top=nowTop+"px";
-          // 丸ドット
-          var nowDot=div({position:"absolute",width:"8px",height:"8px",borderRadius:"50%",background:"#E84545",left:"-4px",zIndex:11,pointerEvents:"none"});
-          nowDot.style.top=(nowTop-3)+"px";
-          col.appendChild(nowLine);col.appendChild(nowDot);
+        rb.style.border=r.done?"2px solid #4caf50":r.visit?"2px solid #5ab4d6":
+          r.status==="pending"?"1px dashed rgba(255,255,255,.3)":"none";
+        var cv=getCust(r.custId),car=cv&&cv.cars&&cv.cars[r.carIdx||0],svc=getSvc(r.sid);
+        var rn=div({fontSize:"11px",fontWeight:"700",color:r.done?"#4caf50":"#fff",lineHeight:"1.3"});
+        rn.textContent=(r.done?"✅ ":r.visit?"🚗 ":"")+(cv?cv.lastName+" "+cv.firstName:"—");rb.appendChild(rn);
+        var rs=div({fontSize:"10px",color:r.done?"rgba(76,175,80,.8)":"rgba(255,255,255,.8)"});
+        rs.textContent=r.time+"・"+(svc?svc.name:"—");rb.appendChild(rs);
+        if(car&&car.plate4){
+          var rp=div({fontSize:"9px",color:r.done?"rgba(76,175,80,.65)":"rgba(255,255,255,.65)"});
+          rp.textContent="["+car.plate4+"]";rb.appendChild(rp);
         }
+        rb.addEventListener("click",function(){
+          var initRf=Object.assign({},r,{_id:r.id,
+            lastName:cv?cv.lastName:"",firstName:cv?cv.firstName:""});
+          openResModal(initRf,false);
+        });
+        col.appendChild(rb);
+      });
+      // 現在時刻ライン
+      if(showNowLine){
+        var nowLine=div({position:"absolute",left:0,right:0,height:"2px",
+          background:"#E84545",zIndex:10,pointerEvents:"none"});
+        nowLine.style.top=nowTopPx+"px";
+        var nowDot=div({position:"absolute",width:"8px",height:"8px",borderRadius:"50%",
+          background:"#E84545",left:"-4px",zIndex:11,pointerEvents:"none"});
+        nowDot.style.top=(nowTopPx-3)+"px";
+        col.appendChild(nowLine);col.appendChild(nowDot);
       }
-      grid.appendChild(col);});
-    tl.appendChild(grid);content.appendChild(tl);
+      bodyRow.appendChild(col);
+    });
+    tlInner.appendChild(bodyRow);
+    tlWrap.appendChild(tlInner);
+    content.appendChild(tlWrap);
   }
 
   // ════ LIST（今日の予約） ════
